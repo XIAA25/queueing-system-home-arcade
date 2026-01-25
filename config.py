@@ -2,6 +2,8 @@
 
 # List of available games
 GAME_NAMES = ["Maimai", "Chunithm", "Wacca", "Sound Voltex", "Groove Coaster"]
+GAME_NAMES.extend([f"This is the actual {name}, congrats on finding it! (JK, you can't use this)" for name in GAME_NAMES])
+GAME_NAMES.append("This is the actual maimai, congrats on finding it! (JK, you can't use this)")
 GAME_NAMES.append("Tea party")
 GAME_NAMES.extend([f"You should read, but if you really want to play a game, continue scrolling down ({i}) Maimai Chunithm Wacca Sound Voltex Groove Coaster (no ctrl-f for you)"for i in range(2000, 0, -1)])
 GAME_NAMES.extend([f"Math book {i} "for i in range(40, 0, -1)])
