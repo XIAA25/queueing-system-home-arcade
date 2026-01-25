@@ -3,7 +3,7 @@
 # List of available games
 GAME_NAMES = ["Maimai", "Chunithm", "Wacca", "Sound Voltex", "Groove Coaster"]
 GAME_NAMES.append("Tea party")
-GAME_NAMES.extend([f"You should read, but if you really want to play a game, continue scrolling down ({i}) Maimai Chunithm Wacca Sound Voltex Groove Coaster (no ctrl-f for you)"for i in range(40000, 0, -1)])
+GAME_NAMES.extend([f"You should read, but if you really want to play a game, continue scrolling down ({i}) Maimai Chunithm Wacca Sound Voltex Groove Coaster (no ctrl-f for you)"for i in range(2000, 0, -1)])
 GAME_NAMES.extend([f"Math book {i} "for i in range(40, 0, -1)])
 GAME_NAMES.extend([f"Deep in Abyss {i} "for i in range(12, 0, -1)])
 GAME_NAMES.extend([f"Apothicary diaries {i} "for i in range(13, 0, -1)])
