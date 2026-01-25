@@ -10,7 +10,7 @@ A simple queue management system for home arcades. Players can join queues for d
 - **Multi-game support** - Manage queues for multiple arcade games simultaneously
 - **Mobile-friendly** - Works on any device with a web browser
 - **QR code access** - Scan to join from your phone
-- **Turn notifications** - Sound and vibration alerts when it's your turn
+- **Turn overlay** - When it's your turn you get an overlay saying it's your turn with a lovely sound to get your attention
 - **Fair play**
   - 60-second timer to accept your turn (configurable)
   - Courtesy cooldown prevents immediate re-queuing when no one is waiting
