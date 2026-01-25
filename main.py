@@ -240,12 +240,16 @@ async def index(request: Request, player: str = Cookie(default="")):
         if not client_host:
             client_host = request.headers.get("X-Forwarded-For", "unknown")
 
+        game_keys = list(games.keys())
+        random.shuffle(game_keys)
+        shuffled_games = {key: games[key] for key in game_keys}
+
         return templates.TemplateResponse(
             request,
             "index.html",
             {
                 "player": player,
-                "games": games,
+                "games": shuffled_games,
                 "player_games": player_games,
                 "pending_turns": pending_turns,
                 "cooldowns": cooldowns,
