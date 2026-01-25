@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Queue</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { text-align: center; color: #333; margin-bottom: 10px; }
+        .qr-section {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .qr-section img {
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .qr-section .url {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+            font-family: monospace;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .player-name {
+            font-size: 1.1em;
+            color: #333;
+        }
+        .now-playing {
+            text-align: center;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .now-playing.you {
+            background: #c8e6c9;
+            border: 2px solid #4caf50;
+        }
+        .now-playing .label { color: #666; font-size: 0.9em; }
+        .now-playing .name { font-weight: bold; font-size: 1.2em; color: #2e7d32; }
+        .now-playing .empty { color: #999; font-style: italic; }
+        .queue-list {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 15px 0;
+        }
+        .queue-list li {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+        }
+        .queue-list li:last-child { border-bottom: none; }
+        .queue-list li.you { background: #e3f2fd; }
+        .queue-list .position {
+            display: inline-block;
+            width: 30px;
+            font-weight: bold;
+            color: #666;
+        }
+        .queue-list .playing-badge {
+            margin-left: auto;
+            font-size: 0.8em;
+            background: #ffeb3b;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .empty { color: #999; font-style: italic; }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .btn-primary { background: #1976d2; color: white; width: 100%; }
+        .btn-primary:hover { background: #1565c0; }
+        .btn-join { background: #1976d2; color: white; }
+        .btn-join:hover { background: #1565c0; }
+        .btn-leave { background: #757575; color: white; }
+        .btn-leave:hover { background: #616161; }
+        .btn-done { background: #4caf50; color: white; width: 100%; }
+        .btn-done:hover { background: #43a047; }
+        .btn-accept { background: #ff9800; color: white; font-size: 1.1em; padding: 15px; flex: 2; }
+        .btn-accept:hover { background: #f57c00; }
+        .btn-skip { background: #9e9e9e; color: white; padding: 15px; flex: 1; }
+        .btn-skip:hover { background: #757575; }
+        .turn-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .pending-turn {
+            text-align: center;
+            padding: 15px;
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .pending-turn .countdown {
+            font-size: 2em;
+            font-weight: bold;
+            color: #e65100;
+        }
+        .pending-turn .message {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .pulse { animation: pulse 1s infinite; }
+        .btn-logout { background: #f5f5f5; color: #666; border: 1px solid #ddd; }
+        .btn-logout:hover { background: #eee; }
+        .btn-pause { background: #f44336; color: white; }
+        .btn-pause:hover { background: #d32f2f; }
+        .btn-resume { background: #4caf50; color: white; }
+        .btn-resume:hover { background: #43a047; }
+        .pause-banner {
+            background: #ffcdd2;
+            border: 2px solid #f44336;
+            color: #c62828;
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .pause-section {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        h2 { margin-top: 0; color: #333; font-size: 1.2em; }
+        h3 { margin: 0 0 10px 0; color: #333; }
+        .game-actions { text-align: center; }
+        .your-status {
+            text-align: center;
+            padding: 8px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 0.95em;
+        }
+        .cooldown-notice {
+            text-align: center;
+            padding: 12px;
+            background: #fff3e0;
+            border: 1px solid #ffb74d;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            color: #e65100;
+        }
+        .cooldown-notice .countdown {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .cooldown-notice .message {
+            color: #666;
+            font-size: 0.85em;
+            margin-top: 4px;
+        }
+        .play-time {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 3px;
+        }
+        .skip-badge {
+            font-size: 0.75em;
+            background: #ffcdd2;
+            color: #c62828;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 5px;
+        }
+        .stats-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .stats-section h4 {
+            margin: 0 0 10px 0;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .stats-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.85em;
+        }
+        .stats-list li {
+            padding: 4px 0;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .stats-list li:last-child { border-bottom: none; }
+        .stats-list .stat-value { color: #666; }
+        .btn-kick {
+            background: #f44336;
+            color: white;
+            font-size: 0.75em;
+            padding: 4px 8px;
+            margin-left: 10px;
+        }
+        .btn-kick:hover { background: #d32f2f; }
+        .btn-remove {
+            background: #ff5722;
+            color: white;
+            font-size: 0.7em;
+            padding: 2px 6px;
+        }
+        .btn-remove:hover { background: #e64a19; }
+        .btn-bump {
+            background: #2196f3;
+            color: white;
+            font-size: 0.7em;
+            padding: 2px 5px;
+            min-width: 24px;
+        }
+        .btn-bump:hover { background: #1976d2; }
+        .btn-bump:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .admin-controls {
+            display: flex;
+            gap: 3px;
+            margin-left: auto;
+        }
+        .btn-swap {
+            background: #9c27b0;
+            color: white;
+            font-size: 0.7em;
+            padding: 2px 6px;
+            margin-left: 5px;
+        }
+        .btn-swap:hover { background: #7b1fa2; }
+        .notification-sound-enabled {
+            color: #4caf50;
+            font-size: 0.85em;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .turn-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 152, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .turn-overlay h2 {
+            color: white;
+            font-size: 2.5em;
+            margin: 0 0 10px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .turn-overlay p {
+            color: white;
+            font-size: 1.3em;
+            margin: 0;
+            opacity: 0.9;
+        }
+        .overlay-button {
+            margin-top: 30px;
+            padding: 20px 50px;
+            font-size: 1.5em;
+            font-weight: bold;
+            background: white;
+            color: #ff9800;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            animation: pulse 1.5s infinite;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .overlay-button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    {% if player and pending_turns %}
+    <div class="turn-overlay" id="turnOverlay">
+        <h2>🎮 YOUR TURN!</h2>
+        <p>{{ pending_turns.keys()|list|first }}</p>
+        <button type="button" class="overlay-button" id="overlayButton">TAP HERE</button>
+    </div>
+    {% endif %}
+
+    <h1>Game Queue</h1>
+
+    <div class="qr-section">
+        <img src="{{ qr_code }}" alt="QR Code to join">
+        <div class="url">{{ qr_url }}</div>
+    </div>
+
+    {% if paused %}
+    <div class="pause-banner">Queue is Paused</div>
+    {% endif %}
+
+    {% if is_host %}
+    <div class="pause-section">
+        <form method="post" action="/toggle-pause" style="margin: 0;">
+            {% if paused %}
+            <button type="submit" class="btn-resume">Resume Queue</button>
+            {% else %}
+            <button type="submit" class="btn-pause">Pause Queue</button>
+            {% endif %}
+        </form>
+    </div>
+    {% endif %}
+
+    {% if not player %}
+    <div class="card">
+        <h2>Enter Your Name</h2>
+        <form method="post" action="/register">
+            <input type="text" name="name" placeholder="Your name (optional)" autofocus>
+            <button type="submit" class="btn-primary">Join</button>
+        </form>
+    </div>
+    {% else %}
+    <div class="header">
+        <span class="player-name">Playing as: <strong>{{ player }}</strong></span>
+        <form method="post" action="/logout" style="margin: 0;">
+            <button type="submit" class="btn-logout">Leave</button>
+        </form>
+    </div>
+
+    {% for game_name, game in games.items() %}
+    <div class="card">
+        <h3>{{ game.name }}</h3>
+
+        <div class="now-playing {% if game.now_playing == player %}you{% endif %}">
+            <div class="label">Now Playing</div>
+            {% if game.now_playing %}
+                <div class="name">
+                    {{ game.now_playing }}{% if game.now_playing == player %} (You){% endif %}
+                    {% if not game.turn_accepted %}<span style="color: #ff9800; font-size: 0.8em;"> (accepting...)</span>{% endif %}
+                    {% if is_host %}
+                    <form method="post" action="/admin/kick" style="display: inline; margin: 0;">
+                        <input type="hidden" name="game_name" value="{{ game.name }}">
+                        <button type="submit" class="btn-kick">Kick</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% if game.play_started_at %}
+                <div class="play-time" data-started="{{ game.play_started_at }}">
+                    {% set elapsed = (now - game.play_started_at)|int %}
+                    {% set mins = elapsed // 60 %}
+                    {% set secs = elapsed % 60 %}
+                    Playing for {{ mins }}:{{ '%02d'|format(secs) }}{% if paused %} (paused){% endif %}
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="empty">No one - join the queue!</div>
+            {% endif %}
+        </div>
+
+        {% if player_games[game_name] == "playing" %}
+            <form method="post" action="/done/{{ game.name }}" class="game-actions">
+                <button type="submit" class="btn-done">Done Playing</button>
+            </form>
+        {% elif player_games[game_name] == "pending" %}
+            <div class="pending-turn">
+                <div class="message">It's your turn!</div>
+                <div class="countdown pulse" data-game="{{ game.name }}" data-remaining="{{ pending_turns[game.name]|int }}">
+                    {{ pending_turns[game.name]|int }}s
+                </div>
+            </div>
+            <div class="turn-actions">
+                <form method="post" action="/accept/{{ game.name }}" style="flex: 2;">
+                    <button type="submit" class="btn-accept" style="width: 100%;">Accept Turn</button>
+                </form>
+                <form method="post" action="/skip/{{ game.name }}" style="flex: 1;">
+                    <button type="submit" class="btn-skip" style="width: 100%;">Skip</button>
+                </form>
+            </div>
+            <form method="post" action="/leave/{{ game.name }}" class="game-actions" style="margin-top: 10px;">
+                <button type="submit" class="btn-leave" style="width: 100%;">Leave Queue</button>
+            </form>
+        {% elif player_games[game_name] %}
+            <div class="your-status">
+                You are #{{ player_games[game_name] }} in queue
+            </div>
+            <form method="post" action="/leave/{{ game.name }}" class="game-actions">
+                <button type="submit" class="btn-leave">Leave Queue</button>
+            </form>
+        {% else %}
+            {% if cooldowns.get(game_name) %}
+            <div class="cooldown-notice">
+                <div class="countdown" data-cooldown="{{ cooldowns[game_name]|int }}">{{ cooldowns[game_name]|int }}s</div>
+                <div class="message">Courtesy cooldown - ask if someone else wants to play</div>
+            </div>
+            {% else %}
+            <form method="post" action="/join/{{ game.name }}" class="game-actions">
+                <button type="submit" class="btn-join">Join Queue</button>
+            </form>
+            {% endif %}
+        {% endif %}
+
+        {% if game.queue %}
+        <h4 style="margin: 15px 0 5px 0; font-size: 0.9em; color: #666;">Queue ({{ game.queue|length }})</h4>
+        {% set player_queue_idx = game.queue.index(player) if player in game.queue else -1 %}
+        <ul class="queue-list">
+            {% for name in game.queue %}
+            <li class="{% if name == player %}you{% endif %}">
+                <span class="position">{{ loop.index }}.</span>
+                {{ name }}{% if name == player %} (You){% endif %}
+                {% if game.skip_counts.get(name, 0) > 0 %}
+                    <span class="skip-badge">{{ game.skip_counts[name] }} skip{{ 's' if game.skip_counts[name] > 1 else '' }}</span>
+                {% endif %}
+                {% for g in games.values() if g.now_playing == name %}
+                    <span class="playing-badge">Playing {{ g.name }}</span>
+                {% endfor %}
+                {% if player_queue_idx >= 0 and loop.index0 > player_queue_idx %}
+                <form method="post" action="/swap" style="display: inline; margin: 0; margin-left: 5px;">
+                    <input type="hidden" name="game_name" value="{{ game.name }}">
+                    <input type="hidden" name="target_player" value="{{ name }}">
+                    <button type="submit" class="btn-swap">Swap</button>
+                </form>
+                {% endif %}
+                {% if is_host %}
+                <div class="admin-controls">
+                    <form method="post" action="/admin/bump-up" style="display: inline; margin: 0;">
+                        <input type="hidden" name="game_name" value="{{ game.name }}">
+                        <input type="hidden" name="player_name" value="{{ name }}">
+                        <button type="submit" class="btn-bump" {% if loop.first %}disabled{% endif %}>&#9650;</button>
+                    </form>
+                    <form method="post" action="/admin/bump-down" style="display: inline; margin: 0;">
+                        <input type="hidden" name="game_name" value="{{ game.name }}">
+                        <input type="hidden" name="player_name" value="{{ name }}">
+                        <button type="submit" class="btn-bump" {% if loop.last %}disabled{% endif %}>&#9660;</button>
+                    </form>
+                    <form method="post" action="/admin/remove" style="display: inline; margin: 0;">
+                        <input type="hidden" name="game_name" value="{{ game.name }}">
+                        <input type="hidden" name="player_name" value="{{ name }}">
+                        <button type="submit" class="btn-remove">X</button>
+                    </form>
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% set all_stat_players = game.session_counts.keys()|list %}
+        {% if all_stat_players|length > 0 %}
+        <div class="stats-section">
+            <h4>Session Stats</h4>
+            <ul class="stats-list">
+                {% for p in all_stat_players|sort %}
+                <li>
+                    <span>{{ p }}{% if p == player %} (You){% endif %}</span>
+                    <span class="stat-value">
+                        {{ game.session_counts.get(p, 0) }} session{{ 's' if game.session_counts.get(p, 0) != 1 else '' }},
+                        {% set total_secs = game.total_play_time.get(p, 0)|int %}
+                        {% set total_mins = total_secs // 60 %}
+                        {% set remaining_secs = total_secs % 60 %}
+                        {{ total_mins }}:{{ '%02d'|format(remaining_secs) }} total
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <script>
+    (function() {
+        const countdowns = document.querySelectorAll('.countdown[data-remaining]');
+        const isPaused = {{ 'true' if paused else 'false' }};
+        const isLoggedIn = {{ 'true' if player else 'false' }};
+
+        // Audio element for notification sound
+        const notificationSound = new Audio('/static/your-turn.mp3');
+        notificationSound.preload = 'auto';
+        notificationSound.load(); // Force load on mobile
+
+        function playNotificationSound() {
+            notificationSound.currentTime = 0;
+            notificationSound.play().catch(e => console.log('Could not play sound:', e));
+        }
+
+        function vibrate() {
+            if ('vibrate' in navigator) {
+                // Strong vibration pattern: 3 long buzzes
+                navigator.vibrate([300, 150, 300, 150, 300]);
+            }
+        }
+
+        // Handle turn overlay
+        const overlay = document.getElementById('turnOverlay');
+        const overlayButton = document.getElementById('overlayButton');
+        if (overlay && overlayButton && !isPaused) {
+            // Play sound and vibrate immediately when overlay appears
+            playNotificationSound();
+            vibrate();
+
+            // Keep playing every 5 seconds while overlay is visible or countdown active
+            setInterval(() => {
+                if (overlay.style.display !== 'none' || document.querySelector('.countdown[data-remaining]')) {
+                    playNotificationSound();
+                    vibrate();
+                }
+            }, 5000);
+
+            // Dismiss overlay on click
+            function dismissOverlay() {
+                overlay.style.display = 'none';
+            }
+
+            overlayButton.addEventListener('click', function(e) {
+                e.stopPropagation();
+                dismissOverlay();
+            });
+
+            overlay.addEventListener('click', dismissOverlay);
+        }
+
+        // Countdown timer for pending turns (only if not paused)
+        if (!isPaused) {
+            countdowns.forEach(el => {
+                let remaining = parseInt(el.dataset.remaining, 10);
+
+                const interval = setInterval(() => {
+                    remaining--;
+                    if (remaining <= 0) {
+                        clearInterval(interval);
+                        el.textContent = '0s';
+                        // Reload page when timer expires
+                        setTimeout(() => location.reload(), 500);
+                    } else {
+                        el.textContent = remaining + 's';
+                    }
+                }, 1000);
+            });
+        }
+
+        // Countdown timer for courtesy cooldowns
+        const cooldownCountdowns = document.querySelectorAll('.countdown[data-cooldown]');
+        cooldownCountdowns.forEach(el => {
+            let remaining = parseInt(el.dataset.cooldown, 10);
+
+            const interval = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    // Reload page when cooldown expires
+                    location.reload();
+                } else {
+                    el.textContent = remaining + 's';
+                }
+            }, 1000);
+        });
+
+        // Auto-refresh every 3 seconds if logged in and no pending turns or cooldowns (to catch updates)
+        // Don't auto-refresh on registration page to avoid interrupting name input
+        if (isLoggedIn && countdowns.length === 0 && cooldownCountdowns.length === 0) {
+            setTimeout(() => location.reload(), 3000);
+        }
+
+        // Update play time counters (only if not paused)
+        if (!isPaused) {
+            const playTimes = document.querySelectorAll('.play-time[data-started]');
+            playTimes.forEach(el => {
+                const started = parseFloat(el.dataset.started);
+                const updateTime = () => {
+                    const elapsed = Math.floor(Date.now() / 1000 - started);
+                    const mins = Math.floor(elapsed / 60);
+                    const secs = elapsed % 60;
+                    el.textContent = `Playing for ${mins}:${secs.toString().padStart(2, '0')}`;
+                };
+                setInterval(updateTime, 1000);
+            });
+        }
+    })();
+    </script>
+</body>
+</html>

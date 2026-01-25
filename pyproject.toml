@@ -1,0 +1,38 @@
+[tool.poetry]
+name = "queueing-system"
+version = "0.1.0"
+description = "A Queueing System for XIAA-Play"
+authors = ["Guillaume Lameyse <guillaumelameyse@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.14"
+fastapi = "^0.115.12"
+jinja2 = "^3.1"
+python-multipart = "^0.0.20"
+uvicorn = "^0.34"
+qrcode = {extras = ["pil"], version = "^8.2"}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.25"
+httpx = "^0.28"
+ruff = "^0.9"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = []
