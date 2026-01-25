@@ -153,21 +153,30 @@ def advance_game(game: Game) -> None:
         game.queue.insert(0, player)
 
 
+def has_available_player_in_queue(game: Game) -> bool:
+    """Check if there's anyone in the queue who isn't playing another game."""
+    for player in game.queue:
+        if get_player_playing_game(player) is None:
+            return True
+    return False
+
+
 def skip_current_player(game: Game) -> None:
-    """Skip current player - they go behind next person or leave if queue empty."""
+    """Skip current player - they go behind next available person or leave if none."""
     if game.now_playing is None:
         return
 
     skipped_player = game.now_playing
 
-    if game.queue:
+    # Check if there's anyone available in queue (not playing another game)
+    if has_available_player_in_queue(game):
         # Increment skip count for this player
         game.skip_counts[skipped_player] = game.skip_counts.get(skipped_player, 0) + 1
-        # There's someone waiting - skip behind them
+        # There's someone available waiting - skip behind them
         advance_game(game)
         game.queue.insert(0, skipped_player)
     else:
-        # No one waiting - player leaves entirely, clear their skip count
+        # No one available waiting - player leaves entirely, clear their skip count
         game.skip_counts.pop(skipped_player, None)
         advance_game(game)
 

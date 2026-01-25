@@ -382,3 +382,30 @@ async def test_total_play_time_accumulates(client):
     await client.post("/done/Maimai")
 
     assert main.games["Maimai"].total_play_time.get("Player", 0) >= 119  # ~2 mins
+
+
+async def test_skip_leaves_when_only_unavailable_players_in_queue(client):
+    """Skipping should leave queue if everyone else is playing other games.
+
+    Scenario: A plays Game1, A queued for Game2. B joins Game2.
+    B gets prompted (A skipped because playing). If B skips, B should leave
+    since A is the only other person and A is unavailable.
+    """
+    # A is playing Maimai and queued for Chunithm
+    main.games["Maimai"].now_playing = "PlayerA"
+    main.games["Maimai"].turn_accepted = True
+    main.games["Chunithm"].queue = ["PlayerA"]
+
+    # B joins Chunithm - B becomes now_playing (A is skipped because playing)
+    client.cookies.set("player", "PlayerB")
+    await client.post("/join/Chunithm")
+
+    assert main.games["Chunithm"].now_playing == "PlayerB"
+    assert "PlayerA" in main.games["Chunithm"].queue
+
+    # B skips - B should leave entirely (not go behind A who is unavailable)
+    await client.post("/skip/Chunithm")
+
+    assert main.games["Chunithm"].now_playing is None  # No one available
+    assert "PlayerB" not in main.games["Chunithm"].queue  # B left
+    assert "PlayerA" in main.games["Chunithm"].queue  # A still waiting
