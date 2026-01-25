@@ -14,7 +14,7 @@ GAME_NAMES.extend([f"Final Fantasy {i} "for i in range(16, 0, -1)])
 TURN_TIMEOUT_SECONDS = 60
 
 # Server port for the web application
-SERVER_PORT = 80
+SERVER_PORT = 8080
 
 # Courtesy cooldown in seconds when finishing with empty queue
 # Gives others a chance to join before the same player can requeue
