@@ -317,9 +317,178 @@
         .overlay-button:active {
             transform: scale(0.95);
         }
+
+        /* Gacha overlay */
+        .gacha-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+            text-align: center;
+            padding: 20px;
+        }
+        .gacha-overlay.rarity-common {
+            background: rgba(120, 120, 120, 0.95);
+        }
+        .gacha-overlay.rarity-rare {
+            background: rgba(63, 81, 181, 0.95);
+        }
+        .gacha-overlay.rarity-legendary {
+            background: linear-gradient(135deg, rgba(255, 152, 0, 0.97), rgba(255, 193, 7, 0.97));
+        }
+        .gacha-overlay .gacha-emoji {
+            font-size: 5em;
+            margin-bottom: 10px;
+            animation: pulse 1.5s infinite;
+        }
+        .gacha-overlay .gacha-name {
+            color: white;
+            font-size: 2em;
+            font-weight: bold;
+            margin: 5px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .gacha-overlay .gacha-rarity {
+            display: inline-block;
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin: 8px 0 15px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .gacha-rarity.rarity-common { background: rgba(255,255,255,0.25); color: #eee; }
+        .gacha-rarity.rarity-rare { background: rgba(255,255,255,0.3); color: #e8eaf6; }
+        .gacha-rarity.rarity-legendary { background: rgba(255,255,255,0.4); color: #fff; }
+        .gacha-overlay .gacha-message {
+            color: white;
+            font-size: 1.15em;
+            margin: 10px 0 25px 0;
+            opacity: 0.95;
+            max-width: 320px;
+        }
+        .gacha-overlay .gacha-new {
+            color: #76ff03;
+            font-weight: bold;
+            font-size: 1.4em;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .gacha-overlay .gacha-dupe {
+            color: #ffcdd2;
+            font-style: italic;
+        }
+        .gacha-dismiss-btn {
+            padding: 15px 40px;
+            font-size: 1.2em;
+            font-weight: bold;
+            background: white;
+            color: #333;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        .gacha-dismiss-btn:active {
+            transform: scale(0.95);
+        }
+        .gacha-counter {
+            color: rgba(255,255,255,0.7);
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+        .next-pull-info {
+            text-align: center;
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 10px;
+        }
+
+        /* Collection section */
+        .collection-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .collection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .collection-header h3 { margin: 0; }
+        .collection-progress {
+            font-size: 0.9em;
+            color: #666;
+            font-weight: bold;
+        }
+        .collection-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        .collection-item {
+            text-align: center;
+            padding: 8px 4px;
+            border-radius: 6px;
+            font-size: 0.75em;
+        }
+        .collection-item.owned {
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+        }
+        .collection-item.unowned {
+            background: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            opacity: 0.5;
+        }
+        .collection-item .item-emoji {
+            font-size: 1.8em;
+            display: block;
+            margin-bottom: 2px;
+        }
+        .collection-item .item-name {
+            display: block;
+            font-size: 0.85em;
+            line-height: 1.2;
+            color: #333;
+        }
+        .collection-item.unowned .item-name {
+            color: #999;
+        }
+        .collection-item .item-count {
+            font-size: 0.8em;
+            color: #666;
+        }
+        .collection-item .item-rarity {
+            display: block;
+            font-size: 0.7em;
+            margin-top: 1px;
+        }
+        .item-rarity.rarity-common { color: #9e9e9e; }
+        .item-rarity.rarity-rare { color: #3f51b5; }
+        .item-rarity.rarity-legendary { color: #ff8f00; font-weight: bold; }
     </style>
 </head>
 <body>
+    {% if player and gacha_pulls %}
+    <div class="gacha-overlay" id="gachaOverlay">
+        <div class="gacha-emoji" id="gachaEmoji"></div>
+        <div class="gacha-name" id="gachaName"></div>
+        <span class="gacha-rarity" id="gachaRarity"></span>
+        <div class="gacha-message" id="gachaMsg"></div>
+        <div class="gacha-counter" id="gachaCounter"></div>
+        <button type="button" class="gacha-dismiss-btn" id="gachaBtn">OK</button>
+    </div>
+    {% endif %}
+
     {% if player and pending_turns %}
     <div class="turn-overlay" id="turnOverlay">
         <h2>🎮 YOUR TURN!</h2>
@@ -506,6 +675,32 @@
         {% endif %}
     </div>
     {% endfor %}
+
+    <!-- Gacha Collection -->
+    {% set owned_count = gacha_collection|length %}
+    {% set total_count = gacha_characters|length %}
+    <div class="collection-card">
+        <div class="collection-header">
+            <h3>Collection</h3>
+            <span class="collection-progress">{{ owned_count }} / {{ total_count }}</span>
+        </div>
+        <div class="collection-grid">
+            {% for char in gacha_characters %}
+            {% set count = gacha_collection.get(char.name, 0) %}
+            <div class="collection-item {% if count > 0 %}owned{% else %}unowned{% endif %}">
+                <span class="item-emoji">{% if count > 0 %}{{ char.emoji }}{% else %}?{% endif %}</span>
+                <span class="item-name">{% if count > 0 %}{{ char.name }}{% else %}???{% endif %}</span>
+                <span class="item-rarity rarity-{{ char.rarity|lower }}">{{ char.rarity }}</span>
+                {% if count > 1 %}
+                <span class="item-count">x{{ count }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% set next_mins = gacha_next_pull_secs // 60 %}
+        {% set next_secs = gacha_next_pull_secs % 60 %}
+        <div class="next-pull-info">Next pull in {{ next_mins }}:{{ '%02d'|format(next_secs) }} of play time</div>
+    </div>
     {% endif %}
 
     <script>
@@ -513,6 +708,71 @@
         const countdowns = document.querySelectorAll('.countdown[data-remaining]');
         const isPaused = {{ 'true' if paused else 'false' }};
         const isLoggedIn = {{ 'true' if player else 'false' }};
+
+        // Gacha multi-pull overlay
+        const gachaOverlay = document.getElementById('gachaOverlay');
+        {% if gacha_pulls %}
+        const gachaPulls = {{ gacha_pulls | tojson }};
+        {% else %}
+        const gachaPulls = [];
+        {% endif %}
+        if (gachaOverlay && gachaPulls.length > 0) {
+            let gachaIdx = 0;
+            const gachaEmoji = document.getElementById('gachaEmoji');
+            const gachaName = document.getElementById('gachaName');
+            const gachaRarity = document.getElementById('gachaRarity');
+            const gachaMsg = document.getElementById('gachaMsg');
+            const gachaCounter = document.getElementById('gachaCounter');
+            const gachaBtn = document.getElementById('gachaBtn');
+
+            function getDupeMessage(pull) {
+                const msgs = [
+                    "Again?! You already have " + pull.count + " of these...",
+                    "The gacha gods are not kind today...",
+                    pull.name + " says: 'Miss me?'",
+                    "Maybe next time you'll get someone new...",
+                    "Deja vu! " + pull.name + " is back... again."
+                ];
+                return msgs[Math.floor(Math.random() * msgs.length)];
+            }
+
+            function showPull(idx) {
+                const pull = gachaPulls[idx];
+                const rarity = pull.rarity.toLowerCase();
+                gachaOverlay.className = 'gacha-overlay rarity-' + rarity;
+                gachaEmoji.textContent = pull.emoji;
+                gachaName.textContent = pull.name;
+                gachaRarity.className = 'gacha-rarity rarity-' + rarity;
+                gachaRarity.textContent = pull.rarity;
+                if (pull.is_duplicate) {
+                    gachaMsg.className = 'gacha-message gacha-dupe';
+                    gachaMsg.textContent = getDupeMessage(pull);
+                } else {
+                    gachaMsg.className = 'gacha-message gacha-new';
+                    gachaMsg.textContent = 'NEW! You got ' + pull.name + '!';
+                }
+                if (gachaPulls.length > 1) {
+                    gachaCounter.textContent = (idx + 1) + ' / ' + gachaPulls.length;
+                }
+                gachaBtn.textContent = (idx < gachaPulls.length - 1) ? 'Next' : 'OK';
+            }
+
+            showPull(0);
+
+            gachaBtn.addEventListener('click', function() {
+                gachaIdx++;
+                if (gachaIdx < gachaPulls.length) {
+                    showPull(gachaIdx);
+                } else {
+                    // Dismiss via POST
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/gacha-dismiss';
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
 
         // Audio element for notification sound
         const notificationSound = new Audio('/static/your-turn.mp3');

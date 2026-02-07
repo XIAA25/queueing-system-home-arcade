@@ -21,10 +21,16 @@ def reset_state():
     main.games = {name: Game(name=name) for name in main.GAME_NAMES}
     main.queue_paused = False
     main.pause_started_at = None
+    main.gacha_collections = {}
+    main.gacha_last_pull = {}
+    main.gacha_pulls_given = {}
     yield
     main.games = {name: Game(name=name) for name in main.GAME_NAMES}
     main.queue_paused = False
     main.pause_started_at = None
+    main.gacha_collections = {}
+    main.gacha_last_pull = {}
+    main.gacha_pulls_given = {}
 
 
 async def test_index_without_player(client):

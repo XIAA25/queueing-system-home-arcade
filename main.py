@@ -15,6 +15,9 @@ from fastapi.templating import Jinja2Templates
 
 from config import (
     COURTESY_COOLDOWN_SECONDS,
+    GACHA_CHARACTERS,
+    GACHA_MINUTES_PER_PULL,
+    GACHA_RARITY_WEIGHTS,
     GAME_NAMES,
     SERVER_PORT,
     TURN_TIMEOUT_SECONDS,
@@ -104,6 +107,11 @@ lock = asyncio.Lock()
 # Courtesy cooldowns: (player, game_name) -> cooldown_ends_at timestamp
 courtesy_cooldowns: dict[tuple[str, str], float] = {}
 
+# Gacha state (global, not per-game)
+gacha_collections: dict[str, dict[str, int]] = {}  # player -> {char: count}
+gacha_last_pull: dict[str, list[dict]] = {}  # player -> list of pull results
+gacha_pulls_given: dict[str, int] = {}  # player -> total pulls awarded
+
 # SSE: connected clients
 sse_clients: set[asyncio.Queue] = set()
 
@@ -141,6 +149,31 @@ def get_player_playing_game(player: str) -> str | None:
         if game.now_playing == player:
             return game.name
     return None
+
+
+def gacha_pull(player: str) -> tuple[dict, bool]:
+    """Perform a gacha pull for a player. Returns (character_info, is_duplicate)."""
+    # Group characters by rarity
+    by_rarity: dict[str, list[dict]] = {}
+    for char in GACHA_CHARACTERS:
+        by_rarity.setdefault(char["rarity"], []).append(char)
+
+    # Pick rarity first using weights
+    rarities = list(GACHA_RARITY_WEIGHTS.keys())
+    weights = [GACHA_RARITY_WEIGHTS[r] for r in rarities]
+    chosen_rarity = random.choices(rarities, weights=weights, k=1)[0]
+
+    # Pick a random character from that rarity
+    character = random.choice(by_rarity[chosen_rarity])
+
+    # Update collection
+    if player not in gacha_collections:
+        gacha_collections[player] = {}
+    collection = gacha_collections[player]
+    is_duplicate = character["name"] in collection
+    collection[character["name"]] = collection.get(character["name"], 0) + 1
+
+    return character, is_duplicate
 
 
 def advance_game(game: Game) -> None:
@@ -275,6 +308,23 @@ async def index(request: Request, player: str = Cookie(default="")):
         if not client_host:
             client_host = request.headers.get("X-Forwarded-For", "unknown")
 
+        # Gacha data for template
+        player_gacha_pulls = gacha_last_pull.get(player) if player else None
+        player_collection = (
+            gacha_collections.get(player, {}) if player else {}
+        )
+
+        # Calculate time progress toward next pull
+        gacha_next_pull_secs = 0
+        if player:
+            total_time = sum(
+                g.total_play_time.get(player, 0)
+                for g in games.values()
+            )
+            pull_interval = GACHA_MINUTES_PER_PULL * 60
+            time_into_current = total_time % pull_interval
+            gacha_next_pull_secs = int(pull_interval - time_into_current)
+
         return templates.TemplateResponse(
             request,
             "index.html",
@@ -290,6 +340,10 @@ async def index(request: Request, player: str = Cookie(default="")):
                 "paused": queue_paused,
                 "now": pause_started_at if queue_paused and pause_started_at else now,
                 "is_host": is_host(client_host),
+                "gacha_pulls": player_gacha_pulls,
+                "gacha_collection": player_collection,
+                "gacha_characters": GACHA_CHARACTERS,
+                "gacha_next_pull_secs": gacha_next_pull_secs,
             },
         )
 
@@ -425,6 +479,28 @@ async def done_playing(game_name: str, player: str = Cookie(default="")):
                 game.total_play_time[player] = (
                     game.total_play_time.get(player, 0) + play_duration
                 )
+            # Gacha: award pulls based on total play time
+            total_time = sum(
+                g.total_play_time.get(player, 0)
+                for g in games.values()
+            )
+            entitled = int(
+                total_time // (GACHA_MINUTES_PER_PULL * 60)
+            )
+            given = gacha_pulls_given.get(player, 0)
+            new_pulls = entitled - given
+            if new_pulls > 0:
+                results = []
+                for _ in range(new_pulls):
+                    char, is_dupe = gacha_pull(player)
+                    count = gacha_collections[player][char["name"]]
+                    results.append({
+                        **char,
+                        "is_duplicate": is_dupe,
+                        "count": count,
+                    })
+                gacha_last_pull[player] = results
+                gacha_pulls_given[player] = entitled
             # Set courtesy cooldown if queue is empty
             if not game.queue:
                 courtesy_cooldowns[(player, game_name)] = (
@@ -437,6 +513,13 @@ async def done_playing(game_name: str, player: str = Cookie(default="")):
                     advance_game(other_game)
 
     await broadcast()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/gacha-dismiss")
+async def gacha_dismiss(player: str = Cookie(default="")):
+    if player and player in gacha_last_pull:
+        gacha_last_pull.pop(player, None)
     return RedirectResponse(url="/", status_code=303)
 
 
