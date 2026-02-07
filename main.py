@@ -9,7 +9,7 @@ from pathlib import Path
 
 import qrcode
 from fastapi import Cookie, FastAPI, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -103,6 +103,24 @@ lock = asyncio.Lock()
 
 # Courtesy cooldowns: (player, game_name) -> cooldown_ends_at timestamp
 courtesy_cooldowns: dict[tuple[str, str], float] = {}
+
+# SSE: connected clients
+sse_clients: set[asyncio.Queue] = set()
+
+
+def subscribe() -> asyncio.Queue:
+    q: asyncio.Queue = asyncio.Queue()
+    sse_clients.add(q)
+    return q
+
+
+def unsubscribe(q: asyncio.Queue) -> None:
+    sse_clients.discard(q)
+
+
+async def broadcast() -> None:
+    for q in sse_clients:
+        await q.put("refresh")
 
 
 def get_cooldown_remaining(player: str, game_name: str) -> float:
@@ -202,6 +220,23 @@ def check_expired_turns() -> None:
             skip_current_player(game)
 
 
+@app.get("/events")
+async def sse_events():
+    q = subscribe()
+
+    async def event_stream():
+        try:
+            while True:
+                msg = await q.get()
+                yield f"data: {msg}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            unsubscribe(q)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @app.get("/")
 async def index(request: Request, player: str = Cookie(default="")):
     async with lock:
@@ -268,6 +303,7 @@ async def register(name: str = Form(default="")):
     display_name = name.strip() or f"Guest-{random.randint(1000, 9999)}"
     response = RedirectResponse(url="/", status_code=303)
     response.set_cookie(key="player", value=display_name, max_age=86400)
+    await broadcast()
     return response
 
 
@@ -288,6 +324,7 @@ async def join_game(game_name: str, player: str = Cookie(default="")):
             if game.now_playing is None:
                 advance_game(game)
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -308,6 +345,7 @@ async def leave_game(game_name: str, player: str = Cookie(default="")):
                 if other_game.name != game_name and other_game.now_playing is None:
                     advance_game(other_game)
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -333,6 +371,7 @@ async def swap_places(
                     game.queue[my_idx],
                 )
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -357,6 +396,7 @@ async def accept_turn(game_name: str, player: str = Cookie(default="")):
                 # Clear skip count when they start playing
                 game.skip_counts.pop(player, None)
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -371,6 +411,7 @@ async def skip_turn(game_name: str, player: str = Cookie(default="")):
         if game.now_playing == player and not game.turn_accepted:
             skip_current_player(game)
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -399,6 +440,7 @@ async def done_playing(game_name: str, player: str = Cookie(default="")):
                 if other_game.name != game_name and other_game.now_playing is None:
                     advance_game(other_game)
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -414,6 +456,7 @@ async def logout(player: str = Cookie(default="")):
 
     response = RedirectResponse(url="/", status_code=303)
     response.delete_cookie(key="player")
+    await broadcast()
     return response
 
 
@@ -436,6 +479,7 @@ async def toggle_pause(request: Request):
                     if game.play_started_at is not None:
                         game.play_started_at += pause_duration
             pause_started_at = None
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -464,6 +508,7 @@ async def admin_kick_player(request: Request, game_name: str = Form(...)):
                 if other_game.name != game_name and other_game.now_playing is None:
                     advance_game(other_game)
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -486,6 +531,7 @@ async def admin_remove_from_queue(
             # Clear their skip count
             game.skip_counts.pop(player_name, None)
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -511,6 +557,7 @@ async def admin_bump_up(
                     game.queue[idx],
                 )
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -536,6 +583,7 @@ async def admin_bump_down(
                     game.queue[idx],
                 )
 
+    await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
