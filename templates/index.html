@@ -596,10 +596,12 @@
             }, 1000);
         });
 
-        // Auto-refresh every 3 seconds if logged in and no pending turns or cooldowns (to catch updates)
-        // Don't auto-refresh on registration page to avoid interrupting name input
-        if (isLoggedIn && countdowns.length === 0 && cooldownCountdowns.length === 0) {
-            setTimeout(() => location.reload(), 3000);
+        // SSE: instant refresh when server state changes
+        if (typeof EventSource !== 'undefined') {
+            const evtSource = new EventSource('/events');
+            evtSource.onmessage = function() {
+                location.reload();
+            };
         }
 
         // Update play time counters (only if not paused)
