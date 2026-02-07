@@ -1,12 +1,15 @@
 import asyncio
 import base64
 import io
+import os
 import random
 import socket
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import bcrypt
 import qrcode
 from fastapi import Cookie, FastAPI, Form, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -22,10 +25,18 @@ from config import (
     SERVER_PORT,
     TURN_TIMEOUT_SECONDS,
 )
-
-app = FastAPI()
-app.mount("/static", StaticFiles(directory=Path(__file__).parent), name="static")
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+from database import (
+    create_session,
+    create_user,
+    delete_session,
+    get_user,
+    init_db,
+    load_state,
+    save_courtesy_cooldowns,
+    save_gacha_state,
+    save_game_state,
+    save_global_state,
+)
 
 
 def get_local_ip() -> str:
@@ -46,6 +57,14 @@ def get_local_ip() -> str:
             return "127.0.0.1"
 
 
+def get_docker_host_ip() -> str | None:
+    """Try to resolve Docker Desktop host IP (Windows/Mac)."""
+    try:
+        return socket.gethostbyname("host.docker.internal")
+    except Exception:
+        return None
+
+
 def is_host(request_client_host: str | None) -> bool:
     """Check if the request is coming from the host machine."""
     if not request_client_host:
@@ -56,10 +75,20 @@ def is_host(request_client_host: str | None) -> bool:
     # Check if it matches the server's local IP
     if request_client_host == LOCAL_IP:
         return True
+    # Check Docker host IP
+    if DOCKER_HOST_IP and request_client_host == DOCKER_HOST_IP:
+        return True
+    # Check extra host IPs from env var
+    if request_client_host in EXTRA_HOST_IPS:
+        return True
     # Check IPv6-mapped IPv4 addresses (e.g., ::ffff:127.0.0.1)
     if request_client_host.startswith("::ffff:"):
         ipv4_part = request_client_host[7:]  # Remove "::ffff:" prefix
-        if ipv4_part in {"127.0.0.1", LOCAL_IP}:
+        allowed = {"127.0.0.1", LOCAL_IP}
+        if DOCKER_HOST_IP:
+            allowed.add(DOCKER_HOST_IP)
+        allowed.update(EXTRA_HOST_IPS)
+        if ipv4_part in allowed:
             return True
     return False
 
@@ -80,6 +109,10 @@ def generate_qr_code_data_url(url: str) -> str:
 
 # Generate QR code once at startup
 LOCAL_IP = get_local_ip()
+DOCKER_HOST_IP = get_docker_host_ip()
+EXTRA_HOST_IPS = set(
+    ip.strip() for ip in os.environ.get("HOST_IPS", "").split(",") if ip.strip()
+)
 HOSTNAME = socket.gethostname()
 QR_URL = f"http://{HOSTNAME}:{SERVER_PORT}"
 QR_CODE_DATA_URL = generate_qr_code_data_url(QR_URL)
@@ -112,8 +145,63 @@ gacha_collections: dict[str, dict[str, int]] = {}  # player -> {char: count}
 gacha_last_pull: dict[str, list[dict]] = {}  # player -> list of pull results
 gacha_pulls_given: dict[str, int] = {}  # player -> total pulls awarded
 
+# Session store: token -> username (loaded from DB on startup)
+sessions: dict[str, str] = {}
+
 # SSE: connected clients
 sse_clients: set[asyncio.Queue] = set()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global games, queue_paused, pause_started_at
+    global courtesy_cooldowns, gacha_collections, gacha_pulls_given, sessions
+
+    await init_db()
+    state = await load_state()
+
+    # Populate game state from DB
+    for name in GAME_NAMES:
+        if name in state["games_data"]:
+            gd = state["games_data"][name]
+            game = games[name]
+            game.queue = gd["queue"]
+            game.now_playing = gd["now_playing"]
+            game.turn_started_at = gd["turn_started_at"]
+            game.turn_accepted = gd["turn_accepted"]
+            game.play_started_at = gd["play_started_at"]
+
+    # Populate per-player stats
+    for (username, game_name), stats in state["player_stats"].items():
+        if game_name in games:
+            game = games[game_name]
+            if stats["skip_count"]:
+                game.skip_counts[username] = stats["skip_count"]
+            if stats["total_play_time"]:
+                game.total_play_time[username] = stats["total_play_time"]
+            if stats["session_count"]:
+                game.session_counts[username] = stats["session_count"]
+
+    gacha_collections = state["gacha_collections"]
+    gacha_pulls_given = state["gacha_pulls_given"]
+    courtesy_cooldowns = state["courtesy_cooldowns"]
+    sessions = state["sessions"]
+    queue_paused = state["queue_paused"]
+    pause_started_at = state["pause_started_at"]
+
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=Path(__file__).parent), name="static")
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+def get_player_from_session(session_token: str) -> str:
+    """Look up username from session token. Returns empty string if invalid."""
+    if not session_token:
+        return ""
+    return sessions.get(session_token, "")
 
 
 def subscribe() -> asyncio.Queue:
@@ -132,7 +220,7 @@ async def broadcast() -> None:
 
 
 def get_cooldown_remaining(player: str, game_name: str) -> float:
-    """Get remaining cooldown seconds for a player on a game. Returns 0 if no cooldown."""
+    """Get remaining cooldown seconds for a player on a game."""
     key = (player, game_name)
     if key not in courtesy_cooldowns:
         return 0
@@ -271,7 +359,9 @@ async def sse_events():
 
 
 @app.get("/")
-async def index(request: Request, player: str = Cookie(default="")):
+async def index(request: Request, session: str = Cookie(default="")):
+    player = get_player_from_session(session)
+
     async with lock:
         # Check for expired turns before rendering
         check_expired_turns()
@@ -310,20 +400,18 @@ async def index(request: Request, player: str = Cookie(default="")):
 
         # Gacha data for template
         player_gacha_pulls = gacha_last_pull.get(player) if player else None
-        player_collection = (
-            gacha_collections.get(player, {}) if player else {}
-        )
+        player_collection = gacha_collections.get(player, {}) if player else {}
 
         # Calculate time progress toward next pull
         gacha_next_pull_secs = 0
         if player:
-            total_time = sum(
-                g.total_play_time.get(player, 0)
-                for g in games.values()
-            )
+            total_time = sum(g.total_play_time.get(player, 0) for g in games.values())
             pull_interval = GACHA_MINUTES_PER_PULL * 60
             time_into_current = total_time % pull_interval
             gacha_next_pull_secs = int(pull_interval - time_into_current)
+
+        # Get error from query params
+        error = request.query_params.get("error", "")
 
         return templates.TemplateResponse(
             request,
@@ -344,21 +432,71 @@ async def index(request: Request, player: str = Cookie(default="")):
                 "gacha_collection": player_collection,
                 "gacha_characters": GACHA_CHARACTERS,
                 "gacha_next_pull_secs": gacha_next_pull_secs,
+                "error": error,
             },
         )
 
 
 @app.post("/register")
-async def register(name: str = Form(default="")):
-    display_name = name.strip() or f"Guest-{random.randint(1000, 9999)}"
+async def register(
+    username: str = Form(default=""),
+    password: str = Form(default=""),
+):
+    username = username.strip()
+    if not username or not password:
+        return RedirectResponse(
+            url="/?error=username_and_password_required", status_code=303
+        )
+
+    # Hash password
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    # Try to create user in DB
+    success = await create_user(username, password_hash)
+    if not success:
+        return RedirectResponse(url="/?error=username_taken", status_code=303)
+
+    # Create session
+    token = await create_session(username)
+    sessions[token] = username
+
     response = RedirectResponse(url="/", status_code=303)
-    response.set_cookie(key="player", value=display_name, max_age=86400)
+    response.set_cookie(key="session", value=token, max_age=86400 * 30, httponly=True)
+    await broadcast()
+    return response
+
+
+@app.post("/login")
+async def login(
+    username: str = Form(default=""),
+    password: str = Form(default=""),
+):
+    username = username.strip()
+    if not username or not password:
+        return RedirectResponse(
+            url="/?error=username_and_password_required", status_code=303
+        )
+
+    user = await get_user(username)
+    if not user:
+        return RedirectResponse(url="/?error=wrong_credentials", status_code=303)
+
+    if not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
+        return RedirectResponse(url="/?error=wrong_credentials", status_code=303)
+
+    # Create session
+    token = await create_session(username)
+    sessions[token] = username
+
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key="session", value=token, max_age=86400 * 30, httponly=True)
     await broadcast()
     return response
 
 
 @app.post("/join/{game_name}")
-async def join_game(game_name: str, player: str = Cookie(default="")):
+async def join_game(game_name: str, session: str = Cookie(default="")):
+    player = get_player_from_session(session)
     if not player or game_name not in games:
         return RedirectResponse(url="/", status_code=303)
 
@@ -374,12 +512,15 @@ async def join_game(game_name: str, player: str = Cookie(default="")):
             if game.now_playing is None:
                 advance_game(game)
 
+        await save_game_state(games)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/leave/{game_name}")
-async def leave_game(game_name: str, player: str = Cookie(default="")):
+async def leave_game(game_name: str, session: str = Cookie(default="")):
+    player = get_player_from_session(session)
     if not player or game_name not in games:
         return RedirectResponse(url="/", status_code=303)
 
@@ -395,6 +536,8 @@ async def leave_game(game_name: str, player: str = Cookie(default="")):
                 if other_game.name != game_name and other_game.now_playing is None:
                     advance_game(other_game)
 
+        await save_game_state(games)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
@@ -403,9 +546,10 @@ async def leave_game(game_name: str, player: str = Cookie(default="")):
 async def swap_places(
     game_name: str = Form(...),
     target_player: str = Form(...),
-    player: str = Cookie(default=""),
+    session: str = Cookie(default=""),
 ):
     """Swap places with someone below you in the queue."""
+    player = get_player_from_session(session)
     if not player or game_name not in games:
         return RedirectResponse(url="/", status_code=303)
 
@@ -421,12 +565,15 @@ async def swap_places(
                     game.queue[my_idx],
                 )
 
+        await save_game_state(games)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/accept/{game_name}")
-async def accept_turn(game_name: str, player: str = Cookie(default="")):
+async def accept_turn(game_name: str, session: str = Cookie(default="")):
+    player = get_player_from_session(session)
     if not player or game_name not in games:
         return RedirectResponse(url="/", status_code=303)
 
@@ -446,13 +593,16 @@ async def accept_turn(game_name: str, player: str = Cookie(default="")):
                 # Clear skip count when they start playing
                 game.skip_counts.pop(player, None)
 
+        await save_game_state(games)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/skip/{game_name}")
-async def skip_turn(game_name: str, player: str = Cookie(default="")):
+async def skip_turn(game_name: str, session: str = Cookie(default="")):
     """Skip your turn - go behind next person, or leave if queue empty."""
+    player = get_player_from_session(session)
     if not player or game_name not in games:
         return RedirectResponse(url="/", status_code=303)
 
@@ -461,12 +611,15 @@ async def skip_turn(game_name: str, player: str = Cookie(default="")):
         if game.now_playing == player and not game.turn_accepted:
             skip_current_player(game)
 
+        await save_game_state(games)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/done/{game_name}")
-async def done_playing(game_name: str, player: str = Cookie(default="")):
+async def done_playing(game_name: str, session: str = Cookie(default="")):
+    player = get_player_from_session(session)
     if not player or game_name not in games:
         return RedirectResponse(url="/", status_code=303)
 
@@ -480,13 +633,8 @@ async def done_playing(game_name: str, player: str = Cookie(default="")):
                     game.total_play_time.get(player, 0) + play_duration
                 )
             # Gacha: award pulls based on total play time
-            total_time = sum(
-                g.total_play_time.get(player, 0)
-                for g in games.values()
-            )
-            entitled = int(
-                total_time // (GACHA_MINUTES_PER_PULL * 60)
-            )
+            total_time = sum(g.total_play_time.get(player, 0) for g in games.values())
+            entitled = int(total_time // (GACHA_MINUTES_PER_PULL * 60))
             given = gacha_pulls_given.get(player, 0)
             new_pulls = entitled - given
             if new_pulls > 0:
@@ -494,11 +642,13 @@ async def done_playing(game_name: str, player: str = Cookie(default="")):
                 for _ in range(new_pulls):
                     char, is_dupe = gacha_pull(player)
                     count = gacha_collections[player][char["name"]]
-                    results.append({
-                        **char,
-                        "is_duplicate": is_dupe,
-                        "count": count,
-                    })
+                    results.append(
+                        {
+                            **char,
+                            "is_duplicate": is_dupe,
+                            "count": count,
+                        }
+                    )
                 gacha_last_pull[player] = results
                 gacha_pulls_given[player] = entitled
             # Set courtesy cooldown if queue is empty
@@ -512,29 +662,43 @@ async def done_playing(game_name: str, player: str = Cookie(default="")):
                 if other_game.name != game_name and other_game.now_playing is None:
                     advance_game(other_game)
 
+            await save_game_state(games)
+            await save_gacha_state(gacha_collections, gacha_pulls_given)
+            await save_courtesy_cooldowns(courtesy_cooldowns)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/gacha-dismiss")
-async def gacha_dismiss(player: str = Cookie(default="")):
+async def gacha_dismiss(session: str = Cookie(default="")):
+    player = get_player_from_session(session)
     if player and player in gacha_last_pull:
         gacha_last_pull.pop(player, None)
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/logout")
-async def logout(player: str = Cookie(default="")):
+async def logout(session: str = Cookie(default="")):
+    player = get_player_from_session(session)
+
     async with lock:
         # Remove player from all games
-        for game in games.values():
-            if player in game.queue:
-                game.queue.remove(player)
-            if game.now_playing == player:
-                advance_game(game)
+        if player:
+            for game in games.values():
+                if player in game.queue:
+                    game.queue.remove(player)
+                if game.now_playing == player:
+                    advance_game(game)
+            await save_game_state(games)
+
+    # Remove session from memory and DB
+    if session and session in sessions:
+        del sessions[session]
+        await delete_session(session)
 
     response = RedirectResponse(url="/", status_code=303)
-    response.delete_cookie(key="player")
+    response.delete_cookie(key="session")
     await broadcast()
     return response
 
@@ -558,6 +722,10 @@ async def toggle_pause(request: Request):
                     if game.play_started_at is not None:
                         game.play_started_at += pause_duration
             pause_started_at = None
+
+        await save_game_state(games)
+        await save_global_state(queue_paused, pause_started_at)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
@@ -587,6 +755,8 @@ async def admin_kick_player(request: Request, game_name: str = Form(...)):
                 if other_game.name != game_name and other_game.now_playing is None:
                     advance_game(other_game)
 
+        await save_game_state(games)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
@@ -609,6 +779,8 @@ async def admin_remove_from_queue(
             game.queue.remove(player_name)
             # Clear their skip count
             game.skip_counts.pop(player_name, None)
+
+        await save_game_state(games)
 
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
@@ -636,6 +808,8 @@ async def admin_bump_up(
                     game.queue[idx],
                 )
 
+        await save_game_state(games)
+
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
 
@@ -661,6 +835,8 @@ async def admin_bump_down(
                     game.queue[idx + 1],
                     game.queue[idx],
                 )
+
+        await save_game_state(games)
 
     await broadcast()
     return RedirectResponse(url="/", status_code=303)

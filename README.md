@@ -69,16 +69,16 @@ poetry run python main.py
 
 You'll see output like:
 ```
-Starting server on http://YOUR-PC-NAME:8080
+Starting server on http://YOUR-PC-NAME:5050
 ```
 
 ### Step 6: Connect
 
-- **On the host PC:** Open `http://localhost:8080` in your browser
+- **On the host PC:** Open `http://localhost:5050` in your browser
 - **On phones/other devices:**
   1. Make sure you're on the same Wi-Fi network
   2. Scan the QR code shown on the host's screen, OR
-  3. Type the URL shown (e.g., `http://YOUR-PC-NAME:8080`)
+  3. Type the URL shown (e.g., `http://YOUR-PC-NAME:5050`)
 
 **Windows Firewall:** The first time you run the server, Windows may ask to allow network access. Click "Allow" to let other devices connect.
 
@@ -94,7 +94,7 @@ GAME_NAMES = ["Maimai", "Chunithm", "Wacca", "Sound Voltex"]
 TURN_TIMEOUT_SECONDS = 60
 
 # Server port
-SERVER_PORT = 8080
+SERVER_PORT = 5050
 
 # Cooldown when finishing with empty queue (gives others a chance to join)
 COURTESY_COOLDOWN_SECONDS = 10
@@ -127,7 +127,7 @@ COURTESY_COOLDOWN_SECONDS = 10
 ### Other devices can't connect
 1. Check you're on the same Wi-Fi network
 2. Allow the app through Windows Firewall
-3. Try using the IP address instead of PC name: `http://192.168.x.x:8080`
+3. Try using the IP address instead of PC name: `http://192.168.x.x:5050`
    - Find your IP by running `ipconfig` in Command Prompt
 
 ### No sound on phone
@@ -150,7 +150,7 @@ tests/
 
 ```bash
 # Run with auto-reload
-poetry run uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+poetry run uvicorn main:app --host 0.0.0.0 --port 5050 --reload
 
 # Run tests
 poetry run pytest
