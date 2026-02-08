@@ -1005,21 +1005,37 @@
         var container = document.getElementById('idleGame');
         if (!container) return;
 
-        var GOAL = 10000;
+        var GOAL = 100000;
         var GENS = [
             {name: 'Pickaxe', baseCost: 10, rate: 0.5},
-            {name: 'Drill', baseCost: 100, rate: 4},
-            {name: 'Blaster', baseCost: 1000, rate: 20}
+            {name: 'Drill', baseCost: 75, rate: 3},
+            {name: 'Blaster', baseCost: 500, rate: 15},
+            {name: 'Laser', baseCost: 3000, rate: 50},
+            {name: 'Quantum', baseCost: 20000, rate: 150}
         ];
         var COST_MULT = 1.15;
+        var CLICK_BASE_COST = 25;
+        var CLICK_COST_MULT = 1.5;
         var SAVE_KEY = 'idleMineState';
 
-        var state = null; // null = idle, object = playing/claiming
+        var state = null;
+
+        function fmt(n) {
+            return Math.floor(n).toLocaleString();
+        }
 
         function loadState() {
             try {
                 var s = localStorage.getItem(SAVE_KEY);
-                if (s) { state = JSON.parse(s); return true; }
+                if (s) {
+                    state = JSON.parse(s);
+                    if (!state.gens || state.gens.length !== GENS.length || state.clickLevel === undefined) {
+                        state = null;
+                        localStorage.removeItem(SAVE_KEY);
+                        return false;
+                    }
+                    return true;
+                }
             } catch(e) {}
             return false;
         }
@@ -1038,6 +1054,14 @@
             return Math.floor(g.baseCost * Math.pow(COST_MULT, state.gens[genIdx]));
         }
 
+        function clickCost() {
+            return Math.floor(CLICK_BASE_COST * Math.pow(CLICK_COST_MULT, state.clickLevel));
+        }
+
+        function clickValue() {
+            return 1 + state.clickLevel;
+        }
+
         function totalRate() {
             var r = 0;
             for (var i = 0; i < GENS.length; i++) r += GENS[i].rate * state.gens[i];
@@ -1046,30 +1070,36 @@
 
         function renderIdle() {
             container.innerHTML = '<h3>Crystal Mine</h3>' +
-                '<p style="font-size:0.9em;color:#666;margin:5px 0 15px">Mine crystals to earn a gacha pull! (~15 min)</p>' +
+                '<p style="font-size:0.9em;color:#666;margin:5px 0 15px">Accumulate ' + fmt(GOAL) + ' crystals to earn a gacha pull!</p>' +
                 '<button class="btn-join" data-action="start">Start Mining</button>';
         }
 
         function renderGame() {
-            var pct = Math.min(100, state.totalEarned / GOAL * 100);
+            var pct = Math.min(100, state.crystals / GOAL * 100);
             var h = '<h3>Crystal Mine</h3>';
             h += '<div style="display:flex;justify-content:space-between;font-size:0.9em;margin-bottom:4px">';
-            h += '<span>Crystals: <strong id="idleCrystals">' + Math.floor(state.crystals) + '</strong></span>';
+            h += '<span>Crystals: <strong id="idleCrystals">' + fmt(state.crystals) + '</strong></span>';
             h += '<span id="idleRate">' + totalRate().toFixed(1) + '/s</span></div>';
-            h += '<div style="background:#e0e0e0;border-radius:4px;height:20px;margin-bottom:12px;overflow:hidden">';
+            h += '<div style="background:#e0e0e0;border-radius:4px;height:20px;margin-bottom:8px;overflow:hidden">';
             h += '<div id="idleBar" style="background:#4caf50;height:100%;width:' + pct + '%;transition:width 0.3s"></div></div>';
             h += '<div style="font-size:0.8em;color:#666;margin-bottom:10px;text-align:center" id="idleProgress">' +
-                 Math.floor(state.totalEarned) + ' / ' + GOAL + '</div>';
-            h += '<button class="btn-join" data-action="click" style="width:100%;margin-bottom:10px;padding:14px;font-size:1.1em">Mine (+1)</button>';
-            h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+                 fmt(state.crystals) + ' / ' + fmt(GOAL) + '</div>';
+            h += '<button class="btn-join" data-action="click" style="width:100%;margin-bottom:10px;padding:14px;font-size:1.1em">Mine (+' + clickValue() + ')</button>';
+            h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">';
+            // Click upgrade
+            var cc = clickCost();
+            h += '<button data-action="buy-click" style="padding:8px 4px;font-size:0.8em;' +
+                 'background:' + (state.crystals >= cc ? '#ff9800' : '#ccc') + ';color:white;border:none;border-radius:4px;cursor:pointer">' +
+                 'Click +1 (Lv ' + state.clickLevel + ')<br>' + fmt(cc) + '</button>';
+            // Generators
             for (var i = 0; i < GENS.length; i++) {
                 var cost = genCost(i);
-                var canBuy = state.crystals >= cost;
-                h += '<button data-action="buy" data-gen="' + i + '" style="flex:1;padding:8px;font-size:0.85em;' +
-                     'background:' + (canBuy ? '#1976d2' : '#bbb') + ';color:white;border:none;border-radius:4px;cursor:pointer">' +
-                     GENS[i].name + ' (x' + state.gens[i] + ')<br>' + cost + ' crystals</button>';
+                h += '<button data-action="buy" data-gen="' + i + '" style="padding:8px 4px;font-size:0.8em;' +
+                     'background:' + (state.crystals >= cost ? '#1976d2' : '#ccc') + ';color:white;border:none;border-radius:4px;cursor:pointer">' +
+                     GENS[i].name + ' (x' + state.gens[i] + ')<br>' + fmt(cost) + ' | ' + GENS[i].rate + '/s</button>';
             }
             h += '</div>';
+            h += '<p style="font-size:0.75em;color:#999;margin:8px 0 0;text-align:center">Buying upgrades spends crystals — invest wisely!</p>';
             return h;
         }
 
@@ -1082,33 +1112,42 @@
 
         function updateValues() {
             var el = document.getElementById('idleCrystals');
-            if (el) el.textContent = Math.floor(state.crystals);
+            if (el) el.textContent = fmt(state.crystals);
             var bar = document.getElementById('idleBar');
-            if (bar) bar.style.width = Math.min(100, state.totalEarned / GOAL * 100) + '%';
+            if (bar) bar.style.width = Math.min(100, state.crystals / GOAL * 100) + '%';
             var prog = document.getElementById('idleProgress');
-            if (prog) prog.textContent = Math.floor(state.totalEarned) + ' / ' + GOAL;
+            if (prog) prog.textContent = fmt(state.crystals) + ' / ' + fmt(GOAL);
             var rate = document.getElementById('idleRate');
             if (rate) rate.textContent = totalRate().toFixed(1) + '/s';
-            // Update buy button states
+            // Generator buttons
             var btns = container.querySelectorAll('[data-action="buy"]');
             for (var i = 0; i < btns.length; i++) {
                 var idx = parseInt(btns[i].dataset.gen);
                 var cost = genCost(idx);
-                btns[i].style.background = state.crystals >= cost ? '#1976d2' : '#bbb';
-                btns[i].innerHTML = GENS[idx].name + ' (x' + state.gens[idx] + ')<br>' + cost + ' crystals';
+                btns[i].style.background = state.crystals >= cost ? '#1976d2' : '#ccc';
+                btns[i].innerHTML = GENS[idx].name + ' (x' + state.gens[idx] + ')<br>' + fmt(cost) + ' | ' + GENS[idx].rate + '/s';
             }
+            // Click upgrade button
+            var clickBtn = container.querySelector('[data-action="buy-click"]');
+            if (clickBtn) {
+                var cc = clickCost();
+                clickBtn.style.background = state.crystals >= cc ? '#ff9800' : '#ccc';
+                clickBtn.innerHTML = 'Click +1 (Lv ' + state.clickLevel + ')<br>' + fmt(cc);
+            }
+            // Mine button
+            var mineBtn = container.querySelector('[data-action="click"]');
+            if (mineBtn) mineBtn.textContent = 'Mine (+' + clickValue() + ')';
         }
 
         function tick() {
             if (!state || state.phase !== 'playing') return;
             var now = Date.now();
             var dt = (now - state.lastTick) / 1000;
-            if (dt > 600) dt = 600; // Cap offline progress to 10 min
+            if (dt > 600) dt = 600;
             state.lastTick = now;
-            var earned = totalRate() * dt;
-            state.crystals += earned;
-            state.totalEarned += earned;
-            if (state.totalEarned >= GOAL) {
+            state.crystals += totalRate() * dt;
+            if (state.crystals >= GOAL) {
+                state.crystals = GOAL;
                 state.phase = 'claiming';
                 saveState();
                 renderClaiming();
@@ -1145,15 +1184,15 @@
                     .then(function(r) { return r.json(); })
                     .then(function(d) {
                         if (d.status === 'started') {
-                            state = {phase: 'playing', crystals: 0, totalEarned: 0, gens: [0,0,0], lastTick: Date.now()};
+                            state = {phase: 'playing', crystals: 0, gens: [0,0,0,0,0], clickLevel: 0, lastTick: Date.now()};
                             saveState();
                             container.innerHTML = renderGame();
                         }
                     });
             } else if (action === 'click' && state && state.phase === 'playing') {
-                state.crystals += 1;
-                state.totalEarned += 1;
-                if (state.totalEarned >= GOAL) {
+                state.crystals += clickValue();
+                if (state.crystals >= GOAL) {
+                    state.crystals = GOAL;
                     state.phase = 'claiming';
                     saveState();
                     renderClaiming();
@@ -1169,6 +1208,13 @@
                     state.gens[idx]++;
                     updateValues();
                 }
+            } else if (action === 'buy-click' && state && state.phase === 'playing') {
+                var cc = clickCost();
+                if (state.crystals >= cc) {
+                    state.crystals -= cc;
+                    state.clickLevel++;
+                    updateValues();
+                }
             }
         });
 
@@ -1176,10 +1222,9 @@
         if (loadState()) {
             if (state.phase === 'playing') {
                 container.innerHTML = renderGame();
-                tick(); // Apply offline progress
+                tick();
             } else if (state.phase === 'claiming') {
                 if (document.getElementById('gachaOverlay')) {
-                    // Pull already granted, just reset for next game
                     clearState();
                     renderIdle();
                 } else {
