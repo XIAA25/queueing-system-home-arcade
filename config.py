@@ -21,17 +21,42 @@ def _char(name: str, rarity: str, image: str) -> dict:
     return {"name": name, "rarity": rarity, "image": image}
 
 
-# Gacha character pool — 119 Vocaloid pixel art characters
+# Gacha character pool
 # Images stored in gacha/<rarity>/<image>
 GACHA_CHARACTERS = [
-    # ── Legendary (6) — The iconic Crypton Vocaloids ──
+    # ── Godslayer  —
+    _char("Squirp", "Godslayer", "SQUIRP.png"),
+    _char("Bébé Evoli", "Godslayer", "BB_EVOLI.png"),
+    _char("Arme de Destruction Massive", "Godslayer", "GIVROU.png"),
+    _char("Nijntje Gang", "Godslayer", "NIJNTJE_GANG.png"),
+    _char("Hot Doggie / Grande Ninette", "Godslayer", "NINETTE.png"),
+    # ── Godlike —
+    _char("Phi le Phoque", "Godlike", "PHI.png"),
+    _char("Pha la Phoque", "Godlike", "PHA.png"),
+    _char("Pho le Phoque", "Godlike", "PHO.png"),
+    _char("Shadow", "Godlike", "SHADOW.png"),
+    _char("Powow", "Godlike", "POWOW.png"),
+    _char("Doudou Phoque", "Godlike", "DOUDOU_PHOQUE.png"),
+    # ── Uber —
+    _char("Shama", "Uber", "SHAMA.png"),
+    _char("Milk", "Uber", "MILK.png"),
+    _char("Salt", "Uber", "SALT.png"),
+    _char("Ras", "Uber", "RAS.png"),
+    _char("Chiffon", "Uber", "CHIFFON.png"),
+    _char("Otohime", "Uber", "OTOHIME.png"),
+    # ── Legendary —
+    _char("Acid", "Legendary", "ACID.png"),
+    _char("Raguel", "Legendary", "RAGUEL.png"),
+    _char("Shikoku", "Legendary", "SHIKOKU.png"),
+    _char("Mika Yurisaki", "Legendary", "MIKA_YURISAKI.png"),
     _char("Hatsune Miku", "Legendary", "HATSUNE MIKU.png"),
+    _char("Zundamon", "Legendary", "ZUNDAMON.jpg"),
     _char("Kagamine Rin", "Legendary", "KAGAMINE RIN.png"),
     _char("Kagamine Len", "Legendary", "KAGAMINE LEN.png"),
     _char("Megurine Luka", "Legendary", "MEGURINE LUKA.png"),
     _char("Kaito", "Legendary", "KAITO.png"),
     _char("Meiko", "Legendary", "MEIKO.png"),
-    # ── Epic (14) — Popular Vocaloids + iconic song characters ──
+    # ── Epic —
     _char("Kasane Teto (SV)", "Epic", "KASANE TETO _SV_.png"),
     _char("Kasane Teto (UTAU)", "Epic", "KASANE TETO _UTAU_.png"),
     _char("Megpoid Gumi", "Epic", "MEGPOID GUMI.png"),
@@ -46,7 +71,7 @@ GACHA_CHARACTERS = [
     _char("World's End Dancehall", "Epic", "WORLD_S END DANCEHALL.png"),
     _char("Meltdown (Adult Rin)", "Epic", "MELTDOWN _ADULT RIN_.png"),
     _char("God-ish", "Epic", "GOD-ISH.png"),
-    # ── Rare (25) — Well-known song characters + notable UTAUs ──
+    # ── Rare —
     _char("Defoko", "Rare", "DEFOKO.png"),
     _char("Momone Momo", "Rare", "MOMONE MOMO.png"),
     _char("Marry Kozakura", "Rare", "MARRY KOZAKURA _KAGEPRO_.png"),
@@ -88,7 +113,7 @@ GACHA_CHARACTERS = [
         "Rare",
         "ROTTEN HERESY _ CHOCOLATE.png",
     ),
-    # ── Uncommon (35) — Song variants + secondary characters ──
+    # ── Uncommon —
     _char("Mesmerizer II", "Uncommon", "MESMERIZER_2.png"),
     _char("Melancholic II", "Uncommon", "MELANCHOLIC_2.png"),
     _char("Leia II", "Uncommon", "LEIA_2.png"),
@@ -144,7 +169,7 @@ GACHA_CHARACTERS = [
         "Uncommon",
         "MAGICAL GIRL _ CHOCOLATE.png",
     ),
-    # ── Common (39) — Remaining variants + obscure characters ──
+    # ── Common —
     _char("4Gou", "Common", "4GOU.png"),
     _char("Adorador II", "Common", "ADORADOR_2.png"),
     _char("Adorador III", "Common", "ADORADOR_3.png"),
@@ -218,7 +243,10 @@ GACHA_CHARACTERS = [
 GACHA_RARITY_WEIGHTS = {
     "Common": 0.40,
     "Uncommon": 0.30,
-    "Rare": 0.18,
-    "Epic": 0.09,
+    "Rare": 0.17,
+    "Epic": 0.08,
     "Legendary": 0.03,
+    "Uber": 0.0125,
+    "Godlike": 0.0050,
+    "Godslayer": 0.0025,
 }
