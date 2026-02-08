@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import os
 import random
 import socket
 import time
@@ -58,8 +59,9 @@ def generate_qr_code_data_url(url: str) -> str:
 
 
 # Generate QR code once at startup
-HOSTNAME = socket.gethostname()
-QR_URL = f"http://{HOSTNAME}:{SERVER_PORT}"
+# QR_URL can be set via BASE_URL env var (e.g. "http://192.168.1.100:5050")
+# Falls back to hostname-based URL for local development
+QR_URL = os.environ.get("BASE_URL", f"http://{socket.gethostname()}:{SERVER_PORT}")
 QR_CODE_DATA_URL = generate_qr_code_data_url(QR_URL)
 
 
@@ -790,5 +792,5 @@ async def admin_bump_down(
 if __name__ == "__main__":
     import uvicorn
 
-    print(f"Starting server on http://{HOSTNAME}:{SERVER_PORT}")
+    print(f"Starting server on {QR_URL}")
     uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT)
