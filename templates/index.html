@@ -877,6 +877,14 @@
         {% set next_mins = gacha_next_pull_secs // 60 %}
         {% set next_secs = gacha_next_pull_secs % 60 %}
         <div class="next-pull-info">Next pull in {{ next_mins }}:{{ '%02d'|format(next_secs) }} of play time</div>
+        <div style="margin-top:15px;padding-top:12px;border-top:1px solid #eee;">
+            <div style="font-size:0.8em;color:#999;text-align:center;margin-bottom:6px;">Drop Rates</div>
+            <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:4px 10px;">
+                {% for rarity, weight in gacha_rarity_weights.items() %}
+                <span style="font-size:0.75em;"><span class="item-rarity rarity-{{ rarity|lower }}">{{ rarity }}</span> {{ (weight * 100)|round(2) }}%</span>
+                {% endfor %}
+            </div>
+        </div>
     </div>
     {% endif %}
 

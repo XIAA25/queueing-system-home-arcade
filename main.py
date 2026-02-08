@@ -379,6 +379,7 @@ async def index(request: Request, session: str = Cookie(default="")):
                 "gacha_pulls": player_gacha_pulls,
                 "gacha_collection": player_collection,
                 "gacha_characters": GACHA_CHARACTERS,
+                "gacha_rarity_weights": GACHA_RARITY_WEIGHTS,
                 "gacha_next_pull_secs": gacha_next_pull_secs,
                 "error": error,
             },
