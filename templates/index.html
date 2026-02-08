@@ -629,6 +629,17 @@
             {% else %}
                 <div class="empty">No one - join the queue!</div>
             {% endif %}
+            {% if is_host and all_users %}
+            <form method="post" action="/admin/set-playing" style="display: flex; gap: 5px; margin-top: 8px; align-items: center;">
+                <input type="hidden" name="game_name" value="{{ game.name }}">
+                <select name="player_name" style="flex: 1; padding: 4px; font-size: 0.85em; border: 1px solid #ddd; border-radius: 4px;">
+                    {% for u in all_users %}
+                    <option value="{{ u }}">{{ u }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" style="background: #ff9800; color: white; font-size: 0.75em; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer;">Set Playing</button>
+            </form>
+            {% endif %}
         </div>
 
         {% if player_games[game_name] == "playing" %}
@@ -716,6 +727,18 @@
             </li>
             {% endfor %}
         </ul>
+        {% endif %}
+
+        {% if is_host and all_users %}
+        <form method="post" action="/admin/add-to-queue" style="display: flex; gap: 5px; margin-top: 8px; align-items: center;">
+            <input type="hidden" name="game_name" value="{{ game.name }}">
+            <select name="player_name" style="flex: 1; padding: 4px; font-size: 0.85em; border: 1px solid #ddd; border-radius: 4px;">
+                {% for u in all_users %}
+                <option value="{{ u }}">{{ u }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" style="background: #1976d2; color: white; font-size: 0.75em; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer;">Add to Queue</button>
+        </form>
         {% endif %}
 
         {% set all_stat_players = game.session_counts.keys()|list %}

@@ -348,3 +348,11 @@ async def delete_user_sessions(username: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM sessions WHERE username = ?", (username,))
         await db.commit()
+
+
+async def get_all_usernames() -> list[str]:
+    """Return all registered usernames, sorted alphabetically."""
+    async with aiosqlite.connect(DB_PATH) as db, db.execute(
+        "SELECT username FROM users ORDER BY username"
+    ) as cur:
+        return [row[0] async for row in cur]

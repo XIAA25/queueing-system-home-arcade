@@ -487,3 +487,37 @@ async def test_skip_leaves_when_only_unavailable_players_in_queue(client):
     assert main.games["Chunithm"].now_playing is None  # No one available
     assert "PlayerB" not in main.games["Chunithm"].queue  # B left
     assert "PlayerA" in main.games["Chunithm"].queue  # A still waiting
+
+
+async def test_admin_set_playing(client):
+    """Admin can set a user as now_playing on a game."""
+    await register_user("admin", "adminpass")
+    await register_user("TargetUser", "pass123")
+    set_session(client, "admin", "admin-token")
+
+    response = await client.post(
+        "/admin/set-playing",
+        data={"game_name": "Maimai", "player_name": "TargetUser"},
+    )
+    assert response.status_code == 200
+    assert main.games["Maimai"].now_playing == "TargetUser"
+    assert main.games["Maimai"].turn_accepted is True
+    assert main.games["Maimai"].play_started_at is not None
+
+
+async def test_admin_add_to_queue(client):
+    """Admin can add a user to a game's queue."""
+    await register_user("admin", "adminpass")
+    await register_user("QueueUser", "pass123")
+    set_session(client, "admin", "admin-token")
+
+    # Someone is already playing so QueueUser goes to queue
+    main.games["Maimai"].now_playing = "OtherPlayer"
+    main.games["Maimai"].turn_accepted = True
+
+    response = await client.post(
+        "/admin/add-to-queue",
+        data={"game_name": "Maimai", "player_name": "QueueUser"},
+    )
+    assert response.status_code == 200
+    assert "QueueUser" in main.games["Maimai"].queue
