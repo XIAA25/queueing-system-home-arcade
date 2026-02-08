@@ -521,3 +521,22 @@ async def test_admin_add_to_queue(client):
     )
     assert response.status_code == 200
     assert "QueueUser" in main.games["Maimai"].queue
+
+
+async def test_admin_reset_stats(client):
+    """Admin can reset session stats without affecting gacha play time."""
+    await register_user("admin", "adminpass")
+    set_session(client, "admin", "admin-token")
+
+    # Set up some stats
+    main.games["Maimai"].total_play_time["PlayerX"] = 600.0
+    main.games["Maimai"].session_counts["PlayerX"] = 3
+
+    await client.post("/admin/reset-stats")
+
+    # Session counts should be cleared
+    assert main.games["Maimai"].session_counts.get("PlayerX") is None
+    # total_play_time should be unchanged (for gacha)
+    assert main.games["Maimai"].total_play_time["PlayerX"] == 600.0
+    # Offset should match total_play_time so display shows zero
+    assert main.games["Maimai"].play_time_offset["PlayerX"] == 600.0

@@ -556,6 +556,9 @@
             <button type="submit" class="btn-pause">Pause Queue</button>
             {% endif %}
         </form>
+        <form method="post" action="/admin/reset-stats" style="margin: 8px 0 0 0;">
+            <button type="submit" style="background: #ff9800; color: white; padding: 8px 16px; border: none; border-radius: 4px; font-size: 0.9em; cursor: pointer;">Reset Session Stats</button>
+        </form>
     </div>
     {% endif %}
 
@@ -751,9 +754,9 @@
                     <span>{{ p }}{% if p == player %} (You){% endif %}</span>
                     <span class="stat-value">
                         {{ game.session_counts.get(p, 0) }} session{{ 's' if game.session_counts.get(p, 0) != 1 else '' }},
-                        {% set total_secs = game.total_play_time.get(p, 0)|int %}
-                        {% set total_mins = total_secs // 60 %}
-                        {% set remaining_secs = total_secs % 60 %}
+                        {% set display_secs = (game.total_play_time.get(p, 0) - game.play_time_offset.get(p, 0))|int %}
+                        {% set total_mins = display_secs // 60 %}
+                        {% set remaining_secs = display_secs % 60 %}
                         {{ total_mins }}:{{ '%02d'|format(remaining_secs) }} total
                     </span>
                 </li>

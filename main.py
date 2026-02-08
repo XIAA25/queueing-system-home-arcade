@@ -77,6 +77,7 @@ class Game:
     skip_counts: dict[str, int] = field(default_factory=dict)  # Skips per player
     total_play_time: dict[str, float] = field(default_factory=dict)  # Cumulative secs
     session_counts: dict[str, int] = field(default_factory=dict)  # Times played
+    play_time_offset: dict[str, float] = field(default_factory=dict)
 
 
 # In-memory state
@@ -129,6 +130,8 @@ async def lifespan(app: FastAPI):
                 game.total_play_time[username] = stats["total_play_time"]
             if stats["session_count"]:
                 game.session_counts[username] = stats["session_count"]
+            if stats.get("play_time_offset"):
+                game.play_time_offset[username] = stats["play_time_offset"]
 
     gacha_collections = state["gacha_collections"]
     gacha_pulls_given = state["gacha_pulls_given"]
@@ -853,6 +856,25 @@ async def admin_add_to_queue(
             # If no one is playing, advance to start
             if game.now_playing is None:
                 advance_game(game)
+
+        await save_game_state(games)
+
+    await broadcast()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/reset-stats")
+async def admin_reset_stats(session: str = Cookie(default="")):
+    """Admin only: Reset displayed session counts and play times (gacha unaffected)."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
+        return RedirectResponse(url="/", status_code=303)
+
+    async with lock:
+        for game in games.values():
+            for p in list(game.total_play_time.keys()):
+                game.play_time_offset[p] = game.total_play_time[p]
+            game.session_counts.clear()
 
         await save_game_state(games)
 
