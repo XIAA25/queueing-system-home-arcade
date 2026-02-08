@@ -526,6 +526,59 @@
         .item-rarity.rarity-uber { color: #e53935; font-weight: bold; }
         .item-rarity.rarity-godlike { color: #00bcd4; font-weight: bold; text-shadow: 0 0 6px rgba(0,188,212,0.6); }
         .item-rarity.rarity-godslayer { color: #d4af37; font-weight: 900; text-shadow: none; }
+        .collection-item.owned { cursor: pointer; }
+        .collection-item.owned:active { transform: scale(0.95); }
+        .gacha-description {
+            color: rgba(255,255,255,0.9);
+            font-size: 0.9em;
+            max-width: 320px;
+            line-height: 1.4;
+            margin: 8px 0 20px 0;
+            font-style: italic;
+        }
+        .char-detail-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1002;
+            text-align: center;
+            padding: 20px;
+        }
+        .char-detail-overlay .gacha-rarity { background: none; }
+        .char-detail-overlay.rarity-common { background: rgba(120, 120, 120, 0.95); }
+        .char-detail-overlay.rarity-uncommon { background: rgba(56, 142, 60, 0.95); }
+        .char-detail-overlay.rarity-rare { background: rgba(63, 81, 181, 0.95); }
+        .char-detail-overlay.rarity-epic { background: rgba(156, 39, 176, 0.95); }
+        .char-detail-overlay.rarity-legendary { background: linear-gradient(135deg, rgba(255, 152, 0, 0.97), rgba(255, 193, 7, 0.97)); }
+        .char-detail-overlay.rarity-uber { background: linear-gradient(135deg, rgba(244, 67, 54, 0.97), rgba(233, 30, 99, 0.97)); }
+        .char-detail-overlay.rarity-godlike { background: linear-gradient(135deg, rgba(0, 188, 212, 0.97), rgba(103, 58, 183, 0.97), rgba(255, 64, 129, 0.97)); }
+        .char-detail-overlay.rarity-godslayer { background: linear-gradient(135deg, rgba(15, 15, 20, 0.97), rgba(139, 0, 0, 0.97), rgba(255, 215, 0, 0.92)); }
+        .char-detail-overlay .gacha-image {
+            width: 128px; height: 128px;
+            image-rendering: pixelated;
+            margin-bottom: 10px;
+        }
+        .char-detail-overlay .gacha-name {
+            color: white; font-size: 2em; font-weight: bold;
+            margin: 5px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .char-detail-overlay .gacha-description {
+            color: rgba(255,255,255,0.9);
+            font-size: 0.9em;
+            max-width: 320px;
+            line-height: 1.4;
+            margin: 8px 0 20px 0;
+            font-style: italic;
+        }
+        .char-detail-overlay .item-count {
+            color: rgba(255,255,255,0.7);
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -534,6 +587,7 @@
         <img class="gacha-image" id="gachaImage" alt="">
         <div class="gacha-name" id="gachaName"></div>
         <span class="gacha-rarity" id="gachaRarity"></span>
+        <div class="gacha-description" id="gachaDesc"></div>
         <div class="gacha-message" id="gachaMsg"></div>
         <div class="gacha-counter" id="gachaCounter"></div>
         <div class="gacha-buttons">
@@ -542,6 +596,15 @@
         </div>
     </div>
     {% endif %}
+
+    <div class="char-detail-overlay" id="charDetail" style="display:none;">
+        <img class="gacha-image" id="charDetailImage" alt="">
+        <div class="gacha-name" id="charDetailName"></div>
+        <span class="gacha-rarity" id="charDetailRarity"></span>
+        <div class="gacha-description" id="charDetailDesc"></div>
+        <div class="item-count" id="charDetailCount"></div>
+        <button type="button" class="gacha-dismiss-btn" id="charDetailClose">Close</button>
+    </div>
 
     {% if player and pending_turns %}
     <div class="turn-overlay" id="turnOverlay">
@@ -796,7 +859,8 @@
         <div class="collection-grid">
             {% for char in gacha_characters %}
             {% set count = gacha_collection.get(char.name, 0) %}
-            <div class="collection-item {% if count > 0 %}owned{% else %}unowned{% endif %}">
+            <div class="collection-item {% if count > 0 %}owned{% else %}unowned{% endif %}"
+                {% if count > 0 %}data-char-name="{{ char.name }}" data-char-rarity="{{ char.rarity }}" data-char-image="{{ char.image }}" data-char-desc="{{ char.description }}" data-char-count="{{ count }}"{% endif %}>
                 {% if count > 0 %}
                 <img class="item-image" src="/static/gacha/{{ char.rarity|lower }}/{{ char.image }}" alt="{{ char.name }}">
                 {% else %}
@@ -834,6 +898,7 @@
             const gachaImage = document.getElementById('gachaImage');
             const gachaName = document.getElementById('gachaName');
             const gachaRarity = document.getElementById('gachaRarity');
+            const gachaDesc = document.getElementById('gachaDesc');
             const gachaMsg = document.getElementById('gachaMsg');
             const gachaCounter = document.getElementById('gachaCounter');
             const gachaBtn = document.getElementById('gachaBtn');
@@ -866,6 +931,7 @@
                 gachaName.textContent = pull.name;
                 gachaRarity.className = 'gacha-rarity rarity-' + rarity;
                 gachaRarity.textContent = pull.rarity;
+                gachaDesc.textContent = pull.description || '';
                 if (pull.is_duplicate) {
                     gachaMsg.className = 'gacha-message gacha-dupe';
                     gachaMsg.textContent = getDupeMessage(pull);
@@ -892,6 +958,30 @@
             });
 
             gachaSkipAll.addEventListener('click', dismissGacha);
+        }
+
+        // Collection item detail overlay
+        const charDetail = document.getElementById('charDetail');
+        const charDetailClose = document.getElementById('charDetailClose');
+        if (charDetail) {
+            document.querySelectorAll('.collection-item.owned[data-char-name]').forEach(function(item) {
+                item.addEventListener('click', function() {
+                    const rarity = item.dataset.charRarity.toLowerCase();
+                    charDetail.className = 'char-detail-overlay rarity-' + rarity;
+                    charDetail.style.display = '';
+                    document.getElementById('charDetailImage').src = '/static/gacha/' + rarity + '/' + item.dataset.charImage;
+                    document.getElementById('charDetailName').textContent = item.dataset.charName;
+                    const rarityEl = document.getElementById('charDetailRarity');
+                    rarityEl.className = 'gacha-rarity rarity-' + rarity;
+                    rarityEl.textContent = item.dataset.charRarity;
+                    document.getElementById('charDetailDesc').textContent = item.dataset.charDesc;
+                    const count = parseInt(item.dataset.charCount);
+                    document.getElementById('charDetailCount').textContent = count > 1 ? 'Owned: x' + count : '';
+                });
+            });
+            charDetailClose.addEventListener('click', function() {
+                charDetail.style.display = 'none';
+            });
         }
 
         // Audio element for notification sound
