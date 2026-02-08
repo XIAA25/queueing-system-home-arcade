@@ -540,3 +540,37 @@ async def test_admin_reset_stats(client):
     assert main.games["Maimai"].total_play_time["PlayerX"] == 600.0
     # Offset should match total_play_time so display shows zero
     assert main.games["Maimai"].play_time_offset["PlayerX"] == 600.0
+
+
+async def test_idle_game_complete(client):
+    """Idle game complete grants a gacha pull immediately."""
+    set_session(client, "Miner")
+
+    response = await client.post("/idle/complete")
+    data = response.json()
+    assert data["status"] == "completed"
+    assert "Miner" in main.gacha_collections
+
+
+async def test_idle_game_complete_replayable(client):
+    """Idle game can be completed multiple times for multiple pulls."""
+    set_session(client, "Miner")
+
+    response = await client.post("/idle/complete")
+    assert response.json()["status"] == "completed"
+    first_collection = dict(main.gacha_collections.get("Miner", {}))
+
+    # Dismiss the pull and complete again
+    main.gacha_last_pull.pop("Miner", None)
+    response = await client.post("/idle/complete")
+    assert response.json()["status"] == "completed"
+    # Collection should have grown
+    second_total = sum(main.gacha_collections["Miner"].values())
+    first_total = sum(first_collection.values())
+    assert second_total > first_total
+
+
+async def test_idle_game_requires_login(client):
+    """Idle game endpoints require authentication."""
+    response = await client.post("/idle/complete")
+    assert response.status_code == 401

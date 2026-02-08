@@ -348,6 +348,15 @@
         .gacha-overlay.rarity-legendary {
             background: linear-gradient(135deg, rgba(255, 152, 0, 0.97), rgba(255, 193, 7, 0.97));
         }
+        .gacha-overlay.rarity-uber { 
+            background: linear-gradient(135deg, rgba(244, 67, 54, 0.97), rgba(233, 30, 99, 0.97)); 
+        }
+        .gacha-overlay.rarity-godlike { 
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.97), rgba(103, 58, 183, 0.97), rgba(255, 64, 129, 0.97)); 
+        }
+        .gacha-overlay.rarity-godslayer { 
+            background: linear-gradient(135deg, rgba(15, 15, 20, 0.97), rgba(139, 0, 0, 0.97), rgba(255, 215, 0, 0.92)); 
+        }
         .gacha-overlay .gacha-image {
             width: 128px;
             height: 128px;
@@ -377,6 +386,9 @@
         .gacha-rarity.rarity-rare { background: rgba(255,255,255,0.3); color: #e8eaf6; }
         .gacha-rarity.rarity-epic { background: rgba(255,255,255,0.35); color: #f3e5f5; }
         .gacha-rarity.rarity-legendary { background: rgba(255,255,255,0.4); color: #fff; }
+        .gacha-rarity.rarity-uber { background: rgba(255,255,255,0.45); color: #ffccd5; }
+        .gacha-rarity.rarity-godlike { background: rgba(255,255,255,0.5); color: #d1c4e9; }
+        .gacha-rarity.rarity-godslayer { background: rgba(255,255,255,0.55); color: #ffe082; }
         .gacha-overlay .gacha-message {
             color: white;
             font-size: 1.15em;
@@ -511,6 +523,9 @@
         .item-rarity.rarity-rare { color: #3f51b5; }
         .item-rarity.rarity-epic { color: #9c27b0; font-weight: bold; }
         .item-rarity.rarity-legendary { color: #ff8f00; font-weight: bold; }
+        .item-rarity.rarity-uber { color: #e53935; font-weight: bold; }
+        .item-rarity.rarity-godlike { color: #00bcd4; font-weight: bold; text-shadow: 0 0 6px rgba(0,188,212,0.6); }
+        .item-rarity.rarity-godslayer { color: #d4af37; font-weight: 900; text-shadow: none; }
     </style>
 </head>
 <body>
@@ -767,6 +782,9 @@
     </div>
     {% endfor %}
 
+    <!-- Crystal Mine idle game -->
+    <div class="card" id="idleGame"></div>
+
     <!-- Gacha Collection -->
     {% set owned_count = gacha_collection|length %}
     {% set total_count = gacha_characters|length %}
@@ -980,6 +998,208 @@
                 setInterval(updateTime, 1000);
             });
         }
+    })();
+
+    // Crystal Mine idle game
+    (function() {
+        var container = document.getElementById('idleGame');
+        if (!container) return;
+
+        var GOAL = 5;
+        var GENS = [
+            {name: 'Pickaxe', baseCost: 10, rate: 0.5},
+            {name: 'Drill', baseCost: 100, rate: 4},
+            {name: 'Blaster', baseCost: 1000, rate: 20}
+        ];
+        var COST_MULT = 1.15;
+        var SAVE_KEY = 'idleMineState';
+
+        var state = null; // null = idle, object = playing/claiming
+
+        function loadState() {
+            try {
+                var s = localStorage.getItem(SAVE_KEY);
+                if (s) { state = JSON.parse(s); return true; }
+            } catch(e) {}
+            return false;
+        }
+
+        function saveState() {
+            if (state) localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+        }
+
+        function clearState() {
+            state = null;
+            localStorage.removeItem(SAVE_KEY);
+        }
+
+        function genCost(genIdx) {
+            var g = GENS[genIdx];
+            return Math.floor(g.baseCost * Math.pow(COST_MULT, state.gens[genIdx]));
+        }
+
+        function totalRate() {
+            var r = 0;
+            for (var i = 0; i < GENS.length; i++) r += GENS[i].rate * state.gens[i];
+            return r;
+        }
+
+        function renderIdle() {
+            container.innerHTML = '<h3>Crystal Mine</h3>' +
+                '<p style="font-size:0.9em;color:#666;margin:5px 0 15px">Mine crystals to earn a gacha pull! (~15 min)</p>' +
+                '<button class="btn-join" data-action="start">Start Mining</button>';
+        }
+
+        function renderGame() {
+            var pct = Math.min(100, state.totalEarned / GOAL * 100);
+            var h = '<h3>Crystal Mine</h3>';
+            h += '<div style="display:flex;justify-content:space-between;font-size:0.9em;margin-bottom:4px">';
+            h += '<span>Crystals: <strong id="idleCrystals">' + Math.floor(state.crystals) + '</strong></span>';
+            h += '<span id="idleRate">' + totalRate().toFixed(1) + '/s</span></div>';
+            h += '<div style="background:#e0e0e0;border-radius:4px;height:20px;margin-bottom:12px;overflow:hidden">';
+            h += '<div id="idleBar" style="background:#4caf50;height:100%;width:' + pct + '%;transition:width 0.3s"></div></div>';
+            h += '<div style="font-size:0.8em;color:#666;margin-bottom:10px;text-align:center" id="idleProgress">' +
+                 Math.floor(state.totalEarned) + ' / ' + GOAL + '</div>';
+            h += '<button class="btn-join" data-action="click" style="width:100%;margin-bottom:10px;padding:14px;font-size:1.1em">Mine (+1)</button>';
+            h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+            for (var i = 0; i < GENS.length; i++) {
+                var cost = genCost(i);
+                var canBuy = state.crystals >= cost;
+                h += '<button data-action="buy" data-gen="' + i + '" style="flex:1;padding:8px;font-size:0.85em;' +
+                     'background:' + (canBuy ? '#1976d2' : '#bbb') + ';color:white;border:none;border-radius:4px;cursor:pointer">' +
+                     GENS[i].name + ' (x' + state.gens[i] + ')<br>' + cost + ' crystals</button>';
+            }
+            h += '</div>';
+            return h;
+        }
+
+        function renderClaiming() {
+            container.innerHTML = '<h3>Crystal Mine</h3>' +
+                '<div style="text-align:center;padding:20px">' +
+                '<p style="font-size:1.2em;font-weight:bold;color:#4caf50">Goal reached!</p>' +
+                '<p id="idleClaimMsg" style="font-size:0.9em;color:#666">Claiming your gacha pull...</p></div>';
+        }
+
+        function updateValues() {
+            var el = document.getElementById('idleCrystals');
+            if (el) el.textContent = Math.floor(state.crystals);
+            var bar = document.getElementById('idleBar');
+            if (bar) bar.style.width = Math.min(100, state.totalEarned / GOAL * 100) + '%';
+            var prog = document.getElementById('idleProgress');
+            if (prog) prog.textContent = Math.floor(state.totalEarned) + ' / ' + GOAL;
+            var rate = document.getElementById('idleRate');
+            if (rate) rate.textContent = totalRate().toFixed(1) + '/s';
+            // Update buy button states
+            var btns = container.querySelectorAll('[data-action="buy"]');
+            for (var i = 0; i < btns.length; i++) {
+                var idx = parseInt(btns[i].dataset.gen);
+                var cost = genCost(idx);
+                btns[i].style.background = state.crystals >= cost ? '#1976d2' : '#bbb';
+                btns[i].innerHTML = GENS[idx].name + ' (x' + state.gens[idx] + ')<br>' + cost + ' crystals';
+            }
+        }
+
+        function tick() {
+            if (!state || state.phase !== 'playing') return;
+            var now = Date.now();
+            var dt = (now - state.lastTick) / 1000;
+            if (dt > 600) dt = 600; // Cap offline progress to 10 min
+            state.lastTick = now;
+            var earned = totalRate() * dt;
+            state.crystals += earned;
+            state.totalEarned += earned;
+            if (state.totalEarned >= GOAL) {
+                state.phase = 'claiming';
+                saveState();
+                renderClaiming();
+                claimReward();
+                return;
+            }
+            updateValues();
+        }
+
+        function claimReward() {
+            fetch('/idle/complete', {method: 'POST', credentials: 'same-origin'})
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.status === 'completed') {
+                        clearState();
+                        // SSE reload will show gacha overlay
+                    } else {
+                        clearState();
+                        renderIdle();
+                    }
+                })
+                .catch(function() {
+                    setTimeout(claimReward, 5000);
+                });
+        }
+
+        // Event delegation
+        container.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            var action = btn.dataset.action;
+            if (action === 'start') {
+                fetch('/idle/start', {method: 'POST', credentials: 'same-origin'})
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (d.status === 'started') {
+                            state = {phase: 'playing', crystals: 0, totalEarned: 0, gens: [0,0,0], lastTick: Date.now()};
+                            saveState();
+                            container.innerHTML = renderGame();
+                        }
+                    });
+            } else if (action === 'click' && state && state.phase === 'playing') {
+                state.crystals += 1;
+                state.totalEarned += 1;
+                if (state.totalEarned >= GOAL) {
+                    state.phase = 'claiming';
+                    saveState();
+                    renderClaiming();
+                    claimReward();
+                } else {
+                    updateValues();
+                }
+            } else if (action === 'buy' && state && state.phase === 'playing') {
+                var idx = parseInt(btn.dataset.gen);
+                var cost = genCost(idx);
+                if (state.crystals >= cost) {
+                    state.crystals -= cost;
+                    state.gens[idx]++;
+                    updateValues();
+                }
+            }
+        });
+
+        // Initialize
+        if (loadState()) {
+            if (state.phase === 'playing') {
+                container.innerHTML = renderGame();
+                tick(); // Apply offline progress
+            } else if (state.phase === 'claiming') {
+                if (document.getElementById('gachaOverlay')) {
+                    // Pull already granted, just reset for next game
+                    clearState();
+                    renderIdle();
+                } else {
+                    renderClaiming();
+                    claimReward();
+                }
+            } else {
+                clearState();
+                renderIdle();
+            }
+        } else {
+            renderIdle();
+        }
+
+        // Game loop
+        setInterval(tick, 100);
+        // Auto-save every 3 seconds
+        setInterval(saveState, 3000);
+        // Save before page unload
+        window.addEventListener('beforeunload', saveState);
     })();
     </script>
 </body>

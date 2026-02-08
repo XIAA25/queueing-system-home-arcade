@@ -12,7 +12,7 @@ from pathlib import Path
 import bcrypt
 import qrcode
 from fastapi import Cookie, FastAPI, Form, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -880,6 +880,30 @@ async def admin_reset_stats(session: str = Cookie(default="")):
 
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/idle/start")
+async def idle_start(session: str = Cookie(default="")):
+    player = get_player_from_session(session)
+    if not player:
+        return JSONResponse({"error": "not_logged_in"}, status_code=401)
+    return JSONResponse({"status": "started"})
+
+
+@app.post("/idle/complete")
+async def idle_complete(session: str = Cookie(default="")):
+    player = get_player_from_session(session)
+    if not player:
+        return JSONResponse({"error": "not_logged_in"}, status_code=401)
+    async with lock:
+        char, is_dupe = gacha_pull(player)
+        count = gacha_collections[player][char["name"]]
+        gacha_last_pull[player] = [
+            {**char, "is_duplicate": is_dupe, "count": count}
+        ]
+        await save_gacha_state(gacha_collections, gacha_pulls_given)
+    await broadcast()
+    return JSONResponse({"status": "completed"})
 
 
 if __name__ == "__main__":
