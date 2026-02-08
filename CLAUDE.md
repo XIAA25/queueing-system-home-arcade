@@ -12,11 +12,11 @@ A queue management system for a home arcade (XIAA-Play). Players join game queue
 # Install dependencies
 poetry install
 
-# Run the application (binds to 0.0.0.0:5050 for LAN access)
+# Run the application (binds to 0.0.0.0:8080 for LAN access)
 poetry run python main.py
 
 # Run with auto-reload during development
-poetry run uvicorn main:app --host 0.0.0.0 --port 5050 --reload
+poetry run uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 
 # Run all tests
 poetry run pytest
