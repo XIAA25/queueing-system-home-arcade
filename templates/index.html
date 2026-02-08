@@ -394,6 +394,10 @@
             color: #ffcdd2;
             font-style: italic;
         }
+        .gacha-buttons {
+            display: flex;
+            gap: 10px;
+        }
         .gacha-dismiss-btn {
             padding: 15px 40px;
             font-size: 1.2em;
@@ -405,6 +409,18 @@
             cursor: pointer;
         }
         .gacha-dismiss-btn:active {
+            transform: scale(0.95);
+        }
+        .gacha-skip-all-btn {
+            padding: 15px 25px;
+            font-size: 1em;
+            background: rgba(255,255,255,0.3);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        .gacha-skip-all-btn:active {
             transform: scale(0.95);
         }
         .gacha-counter {
@@ -505,7 +521,10 @@
         <span class="gacha-rarity" id="gachaRarity"></span>
         <div class="gacha-message" id="gachaMsg"></div>
         <div class="gacha-counter" id="gachaCounter"></div>
-        <button type="button" class="gacha-dismiss-btn" id="gachaBtn">OK</button>
+        <div class="gacha-buttons">
+            <button type="button" class="gacha-dismiss-btn" id="gachaBtn">OK</button>
+            <button type="button" class="gacha-skip-all-btn" id="gachaSkipAll" style="display:none;">Skip All</button>
+        </div>
     </div>
     {% endif %}
 
@@ -774,6 +793,15 @@
             const gachaMsg = document.getElementById('gachaMsg');
             const gachaCounter = document.getElementById('gachaCounter');
             const gachaBtn = document.getElementById('gachaBtn');
+            const gachaSkipAll = document.getElementById('gachaSkipAll');
+
+            function dismissGacha() {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/gacha-dismiss';
+                document.body.appendChild(form);
+                form.submit();
+            }
 
             function getDupeMessage(pull) {
                 const msgs = [
@@ -803,6 +831,7 @@
                 }
                 if (gachaPulls.length > 1) {
                     gachaCounter.textContent = (idx + 1) + ' / ' + gachaPulls.length;
+                    gachaSkipAll.style.display = (idx < gachaPulls.length - 1) ? '' : 'none';
                 }
                 gachaBtn.textContent = (idx < gachaPulls.length - 1) ? 'Next' : 'OK';
             }
@@ -814,14 +843,11 @@
                 if (gachaIdx < gachaPulls.length) {
                     showPull(gachaIdx);
                 } else {
-                    // Dismiss via POST
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = '/gacha-dismiss';
-                    document.body.appendChild(form);
-                    form.submit();
+                    dismissGacha();
                 }
             });
+
+            gachaSkipAll.addEventListener('click', dismissGacha);
         }
 
         // Audio element for notification sound
