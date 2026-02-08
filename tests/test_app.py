@@ -1,10 +1,43 @@
 import time
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import database
 import main
 from main import Game, app
+
+
+@pytest.fixture(autouse=True)
+async def setup_db(tmp_path):
+    """Use a temporary SQLite DB for each test."""
+    db_path = str(tmp_path / "test.db")
+    with patch.object(database, "DB_PATH", db_path):
+        await database.init_db()
+        yield
+
+
+@pytest.fixture(autouse=True)
+def reset_state():
+    """Reset game state before each test."""
+    main.games = {name: Game(name=name) for name in main.GAME_NAMES}
+    main.queue_paused = False
+    main.pause_started_at = None
+    main.gacha_collections = {}
+    main.gacha_last_pull = {}
+    main.gacha_pulls_given = {}
+    main.courtesy_cooldowns = {}
+    main.sessions = {}
+    yield
+    main.games = {name: Game(name=name) for name in main.GAME_NAMES}
+    main.queue_paused = False
+    main.pause_started_at = None
+    main.gacha_collections = {}
+    main.gacha_last_pull = {}
+    main.gacha_pulls_given = {}
+    main.courtesy_cooldowns = {}
+    main.sessions = {}
 
 
 @pytest.fixture
@@ -15,46 +48,90 @@ async def client():
         yield ac
 
 
-@pytest.fixture(autouse=True)
-def reset_state():
-    """Reset game state before each test."""
-    main.games = {name: Game(name=name) for name in main.GAME_NAMES}
-    main.queue_paused = False
-    main.pause_started_at = None
-    yield
-    main.games = {name: Game(name=name) for name in main.GAME_NAMES}
-    main.queue_paused = False
-    main.pause_started_at = None
+def set_session(client: AsyncClient, username: str, token: str = "test-token"):
+    """Helper to set up an authenticated session for a test user."""
+    main.sessions[token] = username
+    client.cookies.set("session", token)
+    return token
+
+
+async def register_user(username: str, password: str = "testpass"):
+    """Helper to register a user in the DB and return a session token."""
+    import bcrypt
+
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    await database.create_user(username, password_hash)
+    token = await database.create_session(username)
+    main.sessions[token] = username
+    return token
 
 
 async def test_index_without_player(client):
     response = await client.get("/")
     assert response.status_code == 200
-    assert "Enter Your Name" in response.text
+    assert "Log In" in response.text
 
 
 async def test_register(client):
-    response = await client.post("/register", data={"name": "Alice"})
+    response = await client.post(
+        "/register", data={"username": "Alice", "password": "pass123"}
+    )
     assert response.status_code == 200
     assert "Alice" in response.text
-    assert "player" in client.cookies
+    assert "session" in client.cookies
 
 
-async def test_register_empty_name_generates_guest(client):
-    response = await client.post("/register", data={"name": ""})
+async def test_register_empty_fields(client):
+    response = await client.post("/register", data={"username": "", "password": ""})
     assert response.status_code == 200
-    assert "Guest-" in response.text
+    assert "required" in response.text
+
+
+async def test_register_duplicate_username(client):
+    await client.post("/register", data={"username": "Alice", "password": "pass123"})
+    # Clear cookies to act as different user
+    client.cookies.clear()
+    response = await client.post(
+        "/register", data={"username": "Alice", "password": "pass456"}
+    )
+    assert response.status_code == 200
+    assert "taken" in response.text
+
+
+async def test_login(client):
+    # Register first
+    await client.post("/register", data={"username": "Alice", "password": "pass123"})
+    client.cookies.clear()
+
+    # Login
+    response = await client.post(
+        "/login", data={"username": "Alice", "password": "pass123"}
+    )
+    assert response.status_code == 200
+    assert "Alice" in response.text
+    assert "session" in client.cookies
+
+
+async def test_login_wrong_password(client):
+    await client.post("/register", data={"username": "Alice", "password": "pass123"})
+    client.cookies.clear()
+
+    response = await client.post(
+        "/login", data={"username": "Alice", "password": "wrong"}
+    )
+    assert response.status_code == 200
+    assert "Wrong" in response.text
 
 
 async def test_join_game(client):
-    client.cookies.set("player", "Bob")
+    set_session(client, "Bob")
     response = await client.post("/join/Maimai")
     assert response.status_code == 200
     assert main.games["Maimai"].now_playing == "Bob"
 
 
 async def test_join_multiple_games(client):
-    client.cookies.set("player", "Carol")
+    set_session(client, "Carol")
 
     # Carol joins Maimai - becomes player since queue empty
     await client.post("/join/Maimai")
@@ -88,7 +165,7 @@ async def test_done_playing(client):
     main.games["Maimai"].now_playing = "Dave"
     main.games["Maimai"].turn_accepted = True
     main.games["Maimai"].queue = ["Eve"]
-    client.cookies.set("player", "Dave")
+    set_session(client, "Dave")
 
     response = await client.post("/done/Maimai")
     assert response.status_code == 200
@@ -115,7 +192,7 @@ async def test_done_playing_triggers_other_games():
 
 async def test_leave_queue(client):
     main.games["Wacca"].queue = ["Grace", "Henry"]
-    client.cookies.set("player", "Grace")
+    set_session(client, "Grace")
 
     response = await client.post("/leave/Wacca")
     assert response.status_code == 200
@@ -126,7 +203,7 @@ async def test_logout_removes_from_all_games(client):
     main.games["Maimai"].now_playing = "Ivan"
     main.games["Maimai"].turn_accepted = True
     main.games["Chunithm"].queue = ["Ivan"]
-    client.cookies.set("player", "Ivan")
+    set_session(client, "Ivan")
 
     response = await client.post("/logout")
     assert response.status_code == 200
@@ -136,7 +213,7 @@ async def test_logout_removes_from_all_games(client):
 
 async def test_accept_turn(client):
     """Player must accept their turn within the timeout period."""
-    client.cookies.set("player", "Kim")
+    set_session(client, "Kim")
     await client.post("/join/Maimai")
 
     # Kim should be now_playing but not yet accepted
@@ -184,7 +261,7 @@ async def test_skip_turn(client):
     main.games["Maimai"].turn_accepted = False
     main.games["Maimai"].turn_started_at = time.time()
     main.games["Maimai"].queue = ["B", "C"]
-    client.cookies.set("player", "A")
+    set_session(client, "A")
 
     response = await client.post("/skip/Maimai")
     assert response.status_code == 200
@@ -200,7 +277,7 @@ async def test_skip_only_works_before_accept(client):
     main.games["Maimai"].turn_accepted = True
     main.games["Maimai"].turn_started_at = time.time()
     main.games["Maimai"].queue = ["Other"]
-    client.cookies.set("player", "Player")
+    set_session(client, "Player")
 
     await client.post("/skip/Maimai")
 
@@ -215,7 +292,7 @@ async def test_skip_with_empty_queue_leaves(client):
     main.games["Maimai"].turn_accepted = False
     main.games["Maimai"].turn_started_at = time.time()
     main.games["Maimai"].queue = []
-    client.cookies.set("player", "Solo")
+    set_session(client, "Solo")
 
     await client.post("/skip/Maimai")
 
@@ -257,7 +334,7 @@ async def test_leave_during_pending(client):
     main.games["Maimai"].turn_accepted = False
     main.games["Maimai"].turn_started_at = time.time()
     main.games["Maimai"].queue = ["Next"]
-    client.cookies.set("player", "Leaving")
+    set_session(client, "Leaving")
 
     await client.post("/leave/Maimai")
 
@@ -267,7 +344,8 @@ async def test_leave_during_pending(client):
 
 
 async def test_toggle_pause(client):
-    """Toggle pause should switch the paused state."""
+    """Toggle pause should switch the paused state (admin only)."""
+    set_session(client, "admin", "admin-token")
     assert main.queue_paused is False
 
     await client.post("/toggle-pause")
@@ -327,7 +405,7 @@ async def test_skip_count_increments(client):
     main.games["Maimai"].turn_accepted = False
     main.games["Maimai"].turn_started_at = time.time()
     main.games["Maimai"].queue = ["Next"]
-    client.cookies.set("player", "Skipper")
+    set_session(client, "Skipper")
 
     # First skip
     await client.post("/skip/Maimai")
@@ -350,7 +428,7 @@ async def test_accept_clears_skip_count(client):
     main.games["Maimai"].turn_accepted = False
     main.games["Maimai"].turn_started_at = time.time()
     main.games["Maimai"].skip_counts["Player"] = 3
-    client.cookies.set("player", "Player")
+    set_session(client, "Player")
 
     await client.post("/accept/Maimai")
 
@@ -362,7 +440,7 @@ async def test_session_count_increments_on_accept(client):
     main.games["Maimai"].now_playing = "Player"
     main.games["Maimai"].turn_accepted = False
     main.games["Maimai"].turn_started_at = time.time()
-    client.cookies.set("player", "Player")
+    set_session(client, "Player")
 
     await client.post("/accept/Maimai")
 
@@ -372,7 +450,7 @@ async def test_session_count_increments_on_accept(client):
 
 async def test_total_play_time_accumulates(client):
     """Total play time should accumulate across sessions."""
-    client.cookies.set("player", "Player")
+    set_session(client, "Player")
 
     # First session
     main.games["Maimai"].now_playing = "Player"
@@ -397,7 +475,7 @@ async def test_skip_leaves_when_only_unavailable_players_in_queue(client):
     main.games["Chunithm"].queue = ["PlayerA"]
 
     # B joins Chunithm - B becomes now_playing (A is skipped because playing)
-    client.cookies.set("player", "PlayerB")
+    set_session(client, "PlayerB")
     await client.post("/join/Chunithm")
 
     assert main.games["Chunithm"].now_playing == "PlayerB"

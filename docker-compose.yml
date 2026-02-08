@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      - BASE_URL=http://XIAA:5050
+    volumes:
+      - data:/app/data
+    restart: unless-stopped
+
+volumes:
+  data:
