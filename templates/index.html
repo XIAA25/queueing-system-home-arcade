@@ -348,6 +348,15 @@
         .gacha-overlay.rarity-legendary {
             background: linear-gradient(135deg, rgba(255, 152, 0, 0.97), rgba(255, 193, 7, 0.97));
         }
+        .gacha-overlay.rarity-uber { 
+            background: linear-gradient(135deg, rgba(244, 67, 54, 0.97), rgba(233, 30, 99, 0.97)); 
+        }
+        .gacha-overlay.rarity-godlike { 
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.97), rgba(103, 58, 183, 0.97), rgba(255, 64, 129, 0.97)); 
+        }
+        .gacha-overlay.rarity-godslayer { 
+            background: linear-gradient(135deg, rgba(15, 15, 20, 0.97), rgba(139, 0, 0, 0.97), rgba(255, 215, 0, 0.92)); 
+        }
         .gacha-overlay .gacha-image {
             width: 128px;
             height: 128px;
@@ -377,6 +386,9 @@
         .gacha-rarity.rarity-rare { background: rgba(255,255,255,0.3); color: #e8eaf6; }
         .gacha-rarity.rarity-epic { background: rgba(255,255,255,0.35); color: #f3e5f5; }
         .gacha-rarity.rarity-legendary { background: rgba(255,255,255,0.4); color: #fff; }
+        .gacha-rarity.rarity-uber { background: rgba(255,255,255,0.45); color: #ffccd5; }
+        .gacha-rarity.rarity-godlike { background: rgba(255,255,255,0.5); color: #d1c4e9; }
+        .gacha-rarity.rarity-godslayer { background: rgba(255,255,255,0.55); color: #ffe082; }
         .gacha-overlay .gacha-message {
             color: white;
             font-size: 1.15em;
@@ -511,6 +523,62 @@
         .item-rarity.rarity-rare { color: #3f51b5; }
         .item-rarity.rarity-epic { color: #9c27b0; font-weight: bold; }
         .item-rarity.rarity-legendary { color: #ff8f00; font-weight: bold; }
+        .item-rarity.rarity-uber { color: #e53935; font-weight: bold; }
+        .item-rarity.rarity-godlike { color: #00bcd4; font-weight: bold; text-shadow: 0 0 6px rgba(0,188,212,0.6); }
+        .item-rarity.rarity-godslayer { color: #d4af37; font-weight: 900; text-shadow: none; }
+        .collection-item.owned { cursor: pointer; }
+        .collection-item.owned:active { transform: scale(0.95); }
+        .gacha-description {
+            color: rgba(255,255,255,0.9);
+            font-size: 0.9em;
+            max-width: 320px;
+            line-height: 1.4;
+            margin: 8px 0 20px 0;
+            font-style: italic;
+        }
+        .char-detail-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1002;
+            text-align: center;
+            padding: 20px;
+        }
+        .char-detail-overlay .gacha-rarity { background: none; }
+        .char-detail-overlay.rarity-common { background: rgba(120, 120, 120, 0.95); }
+        .char-detail-overlay.rarity-uncommon { background: rgba(56, 142, 60, 0.95); }
+        .char-detail-overlay.rarity-rare { background: rgba(63, 81, 181, 0.95); }
+        .char-detail-overlay.rarity-epic { background: rgba(156, 39, 176, 0.95); }
+        .char-detail-overlay.rarity-legendary { background: linear-gradient(135deg, rgba(255, 152, 0, 0.97), rgba(255, 193, 7, 0.97)); }
+        .char-detail-overlay.rarity-uber { background: linear-gradient(135deg, rgba(244, 67, 54, 0.97), rgba(233, 30, 99, 0.97)); }
+        .char-detail-overlay.rarity-godlike { background: linear-gradient(135deg, rgba(0, 188, 212, 0.97), rgba(103, 58, 183, 0.97), rgba(255, 64, 129, 0.97)); }
+        .char-detail-overlay.rarity-godslayer { background: linear-gradient(135deg, rgba(15, 15, 20, 0.97), rgba(139, 0, 0, 0.97), rgba(255, 215, 0, 0.92)); }
+        .char-detail-overlay .gacha-image {
+            width: 128px; height: 128px;
+            image-rendering: pixelated;
+            margin-bottom: 10px;
+        }
+        .char-detail-overlay .gacha-name {
+            color: white; font-size: 2em; font-weight: bold;
+            margin: 5px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .char-detail-overlay .gacha-description {
+            color: rgba(255,255,255,0.9);
+            font-size: 0.9em;
+            max-width: 320px;
+            line-height: 1.4;
+            margin: 8px 0 20px 0;
+            font-style: italic;
+        }
+        .char-detail-overlay .item-count {
+            color: rgba(255,255,255,0.7);
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -519,6 +587,7 @@
         <img class="gacha-image" id="gachaImage" alt="">
         <div class="gacha-name" id="gachaName"></div>
         <span class="gacha-rarity" id="gachaRarity"></span>
+        <div class="gacha-description" id="gachaDesc"></div>
         <div class="gacha-message" id="gachaMsg"></div>
         <div class="gacha-counter" id="gachaCounter"></div>
         <div class="gacha-buttons">
@@ -527,6 +596,15 @@
         </div>
     </div>
     {% endif %}
+
+    <div class="char-detail-overlay" id="charDetail" style="display:none;">
+        <img class="gacha-image" id="charDetailImage" alt="">
+        <div class="gacha-name" id="charDetailName"></div>
+        <span class="gacha-rarity" id="charDetailRarity"></span>
+        <div class="gacha-description" id="charDetailDesc"></div>
+        <div class="item-count" id="charDetailCount"></div>
+        <button type="button" class="gacha-dismiss-btn" id="charDetailClose">Close</button>
+    </div>
 
     {% if player and pending_turns %}
     <div class="turn-overlay" id="turnOverlay">
@@ -555,6 +633,9 @@
             {% else %}
             <button type="submit" class="btn-pause">Pause Queue</button>
             {% endif %}
+        </form>
+        <form method="post" action="/admin/reset-stats" style="margin: 8px 0 0 0;">
+            <button type="submit" style="background: #ff9800; color: white; padding: 8px 16px; border: none; border-radius: 4px; font-size: 0.9em; cursor: pointer;">Reset Session Stats</button>
         </form>
     </div>
     {% endif %}
@@ -628,6 +709,17 @@
                 {% endif %}
             {% else %}
                 <div class="empty">No one - join the queue!</div>
+            {% endif %}
+            {% if is_host and all_users %}
+            <form method="post" action="/admin/set-playing" style="display: flex; gap: 5px; margin-top: 8px; align-items: center;">
+                <input type="hidden" name="game_name" value="{{ game.name }}">
+                <select name="player_name" style="flex: 1; padding: 4px; font-size: 0.85em; border: 1px solid #ddd; border-radius: 4px;">
+                    {% for u in all_users %}
+                    <option value="{{ u }}">{{ u }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" style="background: #ff9800; color: white; font-size: 0.75em; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer;">Set Playing</button>
+            </form>
             {% endif %}
         </div>
 
@@ -718,6 +810,18 @@
         </ul>
         {% endif %}
 
+        {% if is_host and all_users %}
+        <form method="post" action="/admin/add-to-queue" style="display: flex; gap: 5px; margin-top: 8px; align-items: center;">
+            <input type="hidden" name="game_name" value="{{ game.name }}">
+            <select name="player_name" style="flex: 1; padding: 4px; font-size: 0.85em; border: 1px solid #ddd; border-radius: 4px;">
+                {% for u in all_users %}
+                <option value="{{ u }}">{{ u }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" style="background: #1976d2; color: white; font-size: 0.75em; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer;">Add to Queue</button>
+        </form>
+        {% endif %}
+
         {% set all_stat_players = game.session_counts.keys()|list %}
         {% if all_stat_players|length > 0 %}
         <div class="stats-section">
@@ -728,9 +832,9 @@
                     <span>{{ p }}{% if p == player %} (You){% endif %}</span>
                     <span class="stat-value">
                         {{ game.session_counts.get(p, 0) }} session{{ 's' if game.session_counts.get(p, 0) != 1 else '' }},
-                        {% set total_secs = game.total_play_time.get(p, 0)|int %}
-                        {% set total_mins = total_secs // 60 %}
-                        {% set remaining_secs = total_secs % 60 %}
+                        {% set display_secs = (game.total_play_time.get(p, 0) - game.play_time_offset.get(p, 0))|int %}
+                        {% set total_mins = display_secs // 60 %}
+                        {% set remaining_secs = display_secs % 60 %}
                         {{ total_mins }}:{{ '%02d'|format(remaining_secs) }} total
                     </span>
                 </li>
@@ -740,6 +844,9 @@
         {% endif %}
     </div>
     {% endfor %}
+
+    <!-- Crystal Mine idle game -->
+    <div class="card" id="idleGame"></div>
 
     <!-- Gacha Collection -->
     {% set owned_count = gacha_collection|length %}
@@ -752,7 +859,8 @@
         <div class="collection-grid">
             {% for char in gacha_characters %}
             {% set count = gacha_collection.get(char.name, 0) %}
-            <div class="collection-item {% if count > 0 %}owned{% else %}unowned{% endif %}">
+            <div class="collection-item {% if count > 0 %}owned{% else %}unowned{% endif %}"
+                {% if count > 0 %}data-char-name="{{ char.name }}" data-char-rarity="{{ char.rarity }}" data-char-image="{{ char.image }}" data-char-desc="{{ char.description }}" data-char-count="{{ count }}"{% endif %}>
                 {% if count > 0 %}
                 <img class="item-image" src="/static/gacha/{{ char.rarity|lower }}/{{ char.image }}" alt="{{ char.name }}">
                 {% else %}
@@ -769,6 +877,14 @@
         {% set next_mins = gacha_next_pull_secs // 60 %}
         {% set next_secs = gacha_next_pull_secs % 60 %}
         <div class="next-pull-info">Next pull in {{ next_mins }}:{{ '%02d'|format(next_secs) }} of play time</div>
+        <div style="margin-top:15px;padding-top:12px;border-top:1px solid #eee;">
+            <div style="font-size:0.8em;color:#999;text-align:center;margin-bottom:6px;">Drop Rates</div>
+            <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:4px 10px;">
+                {% for rarity, weight in gacha_rarity_weights.items() %}
+                <span style="font-size:0.75em;"><span class="item-rarity rarity-{{ rarity|lower }}">{{ rarity }}</span> {{ (weight * 100)|round(2) }}%</span>
+                {% endfor %}
+            </div>
+        </div>
     </div>
     {% endif %}
 
@@ -790,6 +906,7 @@
             const gachaImage = document.getElementById('gachaImage');
             const gachaName = document.getElementById('gachaName');
             const gachaRarity = document.getElementById('gachaRarity');
+            const gachaDesc = document.getElementById('gachaDesc');
             const gachaMsg = document.getElementById('gachaMsg');
             const gachaCounter = document.getElementById('gachaCounter');
             const gachaBtn = document.getElementById('gachaBtn');
@@ -822,6 +939,7 @@
                 gachaName.textContent = pull.name;
                 gachaRarity.className = 'gacha-rarity rarity-' + rarity;
                 gachaRarity.textContent = pull.rarity;
+                gachaDesc.textContent = pull.description || '';
                 if (pull.is_duplicate) {
                     gachaMsg.className = 'gacha-message gacha-dupe';
                     gachaMsg.textContent = getDupeMessage(pull);
@@ -848,6 +966,30 @@
             });
 
             gachaSkipAll.addEventListener('click', dismissGacha);
+        }
+
+        // Collection item detail overlay
+        const charDetail = document.getElementById('charDetail');
+        const charDetailClose = document.getElementById('charDetailClose');
+        if (charDetail) {
+            document.querySelectorAll('.collection-item.owned[data-char-name]').forEach(function(item) {
+                item.addEventListener('click', function() {
+                    const rarity = item.dataset.charRarity.toLowerCase();
+                    charDetail.className = 'char-detail-overlay rarity-' + rarity;
+                    charDetail.style.display = '';
+                    document.getElementById('charDetailImage').src = '/static/gacha/' + rarity + '/' + item.dataset.charImage;
+                    document.getElementById('charDetailName').textContent = item.dataset.charName;
+                    const rarityEl = document.getElementById('charDetailRarity');
+                    rarityEl.className = 'gacha-rarity rarity-' + rarity;
+                    rarityEl.textContent = item.dataset.charRarity;
+                    document.getElementById('charDetailDesc').textContent = item.dataset.charDesc;
+                    const count = parseInt(item.dataset.charCount);
+                    document.getElementById('charDetailCount').textContent = count > 1 ? 'Owned: x' + count : '';
+                });
+            });
+            charDetailClose.addEventListener('click', function() {
+                charDetail.style.display = 'none';
+            });
         }
 
         // Audio element for notification sound
@@ -954,6 +1096,253 @@
                 setInterval(updateTime, 1000);
             });
         }
+    })();
+
+    // Crystal Mine idle game
+    (function() {
+        var container = document.getElementById('idleGame');
+        if (!container) return;
+
+        var GOAL = 100000;
+        var GENS = [
+            {name: 'Pickaxe', baseCost: 10, rate: 0.5},
+            {name: 'Drill', baseCost: 75, rate: 3},
+            {name: 'Blaster', baseCost: 500, rate: 15},
+            {name: 'Laser', baseCost: 3000, rate: 50},
+            {name: 'Quantum', baseCost: 20000, rate: 150}
+        ];
+        var COST_MULT = 1.15;
+        var CLICK_BASE_COST = 25;
+        var CLICK_COST_MULT = 1.5;
+        var SAVE_KEY = 'idleMineState';
+
+        var state = null;
+
+        function fmt(n) {
+            return Math.floor(n).toLocaleString();
+        }
+
+        function loadState() {
+            try {
+                var s = localStorage.getItem(SAVE_KEY);
+                if (s) {
+                    state = JSON.parse(s);
+                    if (!state.gens || state.gens.length !== GENS.length || state.clickLevel === undefined) {
+                        state = null;
+                        localStorage.removeItem(SAVE_KEY);
+                        return false;
+                    }
+                    return true;
+                }
+            } catch(e) {}
+            return false;
+        }
+
+        function saveState() {
+            if (state) localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+        }
+
+        function clearState() {
+            state = null;
+            localStorage.removeItem(SAVE_KEY);
+        }
+
+        function genCost(genIdx) {
+            var g = GENS[genIdx];
+            return Math.floor(g.baseCost * Math.pow(COST_MULT, state.gens[genIdx]));
+        }
+
+        function clickCost() {
+            return Math.floor(CLICK_BASE_COST * Math.pow(CLICK_COST_MULT, state.clickLevel));
+        }
+
+        function clickValue() {
+            return 1 + state.clickLevel;
+        }
+
+        function totalRate() {
+            var r = 0;
+            for (var i = 0; i < GENS.length; i++) r += GENS[i].rate * state.gens[i];
+            return r;
+        }
+
+        function renderIdle() {
+            container.innerHTML = '<h3>Crystal Mine</h3>' +
+                '<p style="font-size:0.9em;color:#666;margin:5px 0 15px">Accumulate ' + fmt(GOAL) + ' crystals to earn a gacha pull!</p>' +
+                '<button class="btn-join" data-action="start">Start Mining</button>';
+        }
+
+        function renderGame() {
+            var pct = Math.min(100, state.crystals / GOAL * 100);
+            var h = '<h3>Crystal Mine</h3>';
+            h += '<div style="display:flex;justify-content:space-between;font-size:0.9em;margin-bottom:4px">';
+            h += '<span>Crystals: <strong id="idleCrystals">' + fmt(state.crystals) + '</strong></span>';
+            h += '<span id="idleRate">' + totalRate().toFixed(1) + '/s</span></div>';
+            h += '<div style="background:#e0e0e0;border-radius:4px;height:20px;margin-bottom:8px;overflow:hidden">';
+            h += '<div id="idleBar" style="background:#4caf50;height:100%;width:' + pct + '%;transition:width 0.3s"></div></div>';
+            h += '<div style="font-size:0.8em;color:#666;margin-bottom:10px;text-align:center" id="idleProgress">' +
+                 fmt(state.crystals) + ' / ' + fmt(GOAL) + '</div>';
+            h += '<button class="btn-join" data-action="click" style="width:100%;margin-bottom:10px;padding:14px;font-size:1.1em">Mine (+' + clickValue() + ')</button>';
+            h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">';
+            // Click upgrade
+            var cc = clickCost();
+            h += '<button data-action="buy-click" style="padding:8px 4px;font-size:0.8em;' +
+                 'background:' + (state.crystals >= cc ? '#ff9800' : '#ccc') + ';color:white;border:none;border-radius:4px;cursor:pointer">' +
+                 'Click +1 (Lv ' + state.clickLevel + ')<br>' + fmt(cc) + '</button>';
+            // Generators
+            for (var i = 0; i < GENS.length; i++) {
+                var cost = genCost(i);
+                h += '<button data-action="buy" data-gen="' + i + '" style="padding:8px 4px;font-size:0.8em;' +
+                     'background:' + (state.crystals >= cost ? '#1976d2' : '#ccc') + ';color:white;border:none;border-radius:4px;cursor:pointer">' +
+                     GENS[i].name + ' (x' + state.gens[i] + ')<br>' + fmt(cost) + ' | ' + GENS[i].rate + '/s</button>';
+            }
+            h += '</div>';
+            h += '<p style="font-size:0.75em;color:#999;margin:8px 0 0;text-align:center">Buying upgrades spends crystals — invest wisely!</p>';
+            return h;
+        }
+
+        function renderClaiming() {
+            container.innerHTML = '<h3>Crystal Mine</h3>' +
+                '<div style="text-align:center;padding:20px">' +
+                '<p style="font-size:1.2em;font-weight:bold;color:#4caf50">Goal reached!</p>' +
+                '<p id="idleClaimMsg" style="font-size:0.9em;color:#666">Claiming your gacha pull...</p></div>';
+        }
+
+        function updateValues() {
+            var el = document.getElementById('idleCrystals');
+            if (el) el.textContent = fmt(state.crystals);
+            var bar = document.getElementById('idleBar');
+            if (bar) bar.style.width = Math.min(100, state.crystals / GOAL * 100) + '%';
+            var prog = document.getElementById('idleProgress');
+            if (prog) prog.textContent = fmt(state.crystals) + ' / ' + fmt(GOAL);
+            var rate = document.getElementById('idleRate');
+            if (rate) rate.textContent = totalRate().toFixed(1) + '/s';
+            // Generator buttons
+            var btns = container.querySelectorAll('[data-action="buy"]');
+            for (var i = 0; i < btns.length; i++) {
+                var idx = parseInt(btns[i].dataset.gen);
+                var cost = genCost(idx);
+                btns[i].style.background = state.crystals >= cost ? '#1976d2' : '#ccc';
+                btns[i].innerHTML = GENS[idx].name + ' (x' + state.gens[idx] + ')<br>' + fmt(cost) + ' | ' + GENS[idx].rate + '/s';
+            }
+            // Click upgrade button
+            var clickBtn = container.querySelector('[data-action="buy-click"]');
+            if (clickBtn) {
+                var cc = clickCost();
+                clickBtn.style.background = state.crystals >= cc ? '#ff9800' : '#ccc';
+                clickBtn.innerHTML = 'Click +1 (Lv ' + state.clickLevel + ')<br>' + fmt(cc);
+            }
+            // Mine button
+            var mineBtn = container.querySelector('[data-action="click"]');
+            if (mineBtn) mineBtn.textContent = 'Mine (+' + clickValue() + ')';
+        }
+
+        function tick() {
+            if (!state || state.phase !== 'playing') return;
+            var now = Date.now();
+            var dt = (now - state.lastTick) / 1000;
+            if (dt > 600) dt = 600;
+            state.lastTick = now;
+            state.crystals += totalRate() * dt;
+            if (state.crystals >= GOAL) {
+                state.crystals = GOAL;
+                state.phase = 'claiming';
+                saveState();
+                renderClaiming();
+                claimReward();
+                return;
+            }
+            updateValues();
+        }
+
+        function claimReward() {
+            fetch('/idle/complete', {method: 'POST', credentials: 'same-origin'})
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.status === 'completed') {
+                        clearState();
+                        // SSE reload will show gacha overlay
+                    } else {
+                        clearState();
+                        renderIdle();
+                    }
+                })
+                .catch(function() {
+                    setTimeout(claimReward, 5000);
+                });
+        }
+
+        // Event delegation
+        container.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            var action = btn.dataset.action;
+            if (action === 'start') {
+                fetch('/idle/start', {method: 'POST', credentials: 'same-origin'})
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (d.status === 'started') {
+                            state = {phase: 'playing', crystals: 0, gens: [0,0,0,0,0], clickLevel: 0, lastTick: Date.now()};
+                            saveState();
+                            container.innerHTML = renderGame();
+                        }
+                    });
+            } else if (action === 'click' && state && state.phase === 'playing') {
+                state.crystals += clickValue();
+                if (state.crystals >= GOAL) {
+                    state.crystals = GOAL;
+                    state.phase = 'claiming';
+                    saveState();
+                    renderClaiming();
+                    claimReward();
+                } else {
+                    updateValues();
+                }
+            } else if (action === 'buy' && state && state.phase === 'playing') {
+                var idx = parseInt(btn.dataset.gen);
+                var cost = genCost(idx);
+                if (state.crystals >= cost) {
+                    state.crystals -= cost;
+                    state.gens[idx]++;
+                    updateValues();
+                }
+            } else if (action === 'buy-click' && state && state.phase === 'playing') {
+                var cc = clickCost();
+                if (state.crystals >= cc) {
+                    state.crystals -= cc;
+                    state.clickLevel++;
+                    updateValues();
+                }
+            }
+        });
+
+        // Initialize
+        if (loadState()) {
+            if (state.phase === 'playing') {
+                container.innerHTML = renderGame();
+                tick();
+            } else if (state.phase === 'claiming') {
+                if (document.getElementById('gachaOverlay')) {
+                    clearState();
+                    renderIdle();
+                } else {
+                    renderClaiming();
+                    claimReward();
+                }
+            } else {
+                clearState();
+                renderIdle();
+            }
+        } else {
+            renderIdle();
+        }
+
+        // Game loop
+        setInterval(tick, 100);
+        // Auto-save every 3 seconds
+        setInterval(saveState, 3000);
+        // Save before page unload
+        window.addEventListener('beforeunload', saveState);
     })();
     </script>
 </body>

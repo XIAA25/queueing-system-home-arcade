@@ -487,3 +487,90 @@ async def test_skip_leaves_when_only_unavailable_players_in_queue(client):
     assert main.games["Chunithm"].now_playing is None  # No one available
     assert "PlayerB" not in main.games["Chunithm"].queue  # B left
     assert "PlayerA" in main.games["Chunithm"].queue  # A still waiting
+
+
+async def test_admin_set_playing(client):
+    """Admin can set a user as now_playing on a game."""
+    await register_user("admin", "adminpass")
+    await register_user("TargetUser", "pass123")
+    set_session(client, "admin", "admin-token")
+
+    response = await client.post(
+        "/admin/set-playing",
+        data={"game_name": "Maimai", "player_name": "TargetUser"},
+    )
+    assert response.status_code == 200
+    assert main.games["Maimai"].now_playing == "TargetUser"
+    assert main.games["Maimai"].turn_accepted is True
+    assert main.games["Maimai"].play_started_at is not None
+
+
+async def test_admin_add_to_queue(client):
+    """Admin can add a user to a game's queue."""
+    await register_user("admin", "adminpass")
+    await register_user("QueueUser", "pass123")
+    set_session(client, "admin", "admin-token")
+
+    # Someone is already playing so QueueUser goes to queue
+    main.games["Maimai"].now_playing = "OtherPlayer"
+    main.games["Maimai"].turn_accepted = True
+
+    response = await client.post(
+        "/admin/add-to-queue",
+        data={"game_name": "Maimai", "player_name": "QueueUser"},
+    )
+    assert response.status_code == 200
+    assert "QueueUser" in main.games["Maimai"].queue
+
+
+async def test_admin_reset_stats(client):
+    """Admin can reset session stats without affecting gacha play time."""
+    await register_user("admin", "adminpass")
+    set_session(client, "admin", "admin-token")
+
+    # Set up some stats
+    main.games["Maimai"].total_play_time["PlayerX"] = 600.0
+    main.games["Maimai"].session_counts["PlayerX"] = 3
+
+    await client.post("/admin/reset-stats")
+
+    # Session counts should be cleared
+    assert main.games["Maimai"].session_counts.get("PlayerX") is None
+    # total_play_time should be unchanged (for gacha)
+    assert main.games["Maimai"].total_play_time["PlayerX"] == 600.0
+    # Offset should match total_play_time so display shows zero
+    assert main.games["Maimai"].play_time_offset["PlayerX"] == 600.0
+
+
+async def test_idle_game_complete(client):
+    """Idle game complete grants a gacha pull immediately."""
+    set_session(client, "Miner")
+
+    response = await client.post("/idle/complete")
+    data = response.json()
+    assert data["status"] == "completed"
+    assert "Miner" in main.gacha_collections
+
+
+async def test_idle_game_complete_replayable(client):
+    """Idle game can be completed multiple times for multiple pulls."""
+    set_session(client, "Miner")
+
+    response = await client.post("/idle/complete")
+    assert response.json()["status"] == "completed"
+    first_collection = dict(main.gacha_collections.get("Miner", {}))
+
+    # Dismiss the pull and complete again
+    main.gacha_last_pull.pop("Miner", None)
+    response = await client.post("/idle/complete")
+    assert response.json()["status"] == "completed"
+    # Collection should have grown
+    second_total = sum(main.gacha_collections["Miner"].values())
+    first_total = sum(first_collection.values())
+    assert second_total > first_total
+
+
+async def test_idle_game_requires_login(client):
+    """Idle game endpoints require authentication."""
+    response = await client.post("/idle/complete")
+    assert response.status_code == 401

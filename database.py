@@ -1,5 +1,6 @@
 """SQLite persistence layer for the queueing system."""
 
+import contextlib
 import json
 import os
 import time
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS player_game_stats (
     skip_count INTEGER NOT NULL DEFAULT 0,
     total_play_time REAL NOT NULL DEFAULT 0.0,
     session_count INTEGER NOT NULL DEFAULT 0,
+    play_time_offset REAL NOT NULL DEFAULT 0.0,
     PRIMARY KEY (username, game_name)
 );
 
@@ -74,6 +76,12 @@ async def init_db() -> None:
     db_dir.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
+        # Migration: add play_time_offset column if missing (existing DBs)
+        with contextlib.suppress(Exception):
+            await db.execute(
+                "ALTER TABLE player_game_stats "
+                "ADD COLUMN play_time_offset REAL NOT NULL DEFAULT 0.0"
+            )
         await db.commit()
 
 
@@ -113,6 +121,7 @@ async def load_state() -> dict:
                     "skip_count": row["skip_count"],
                     "total_play_time": row["total_play_time"],
                     "session_count": row["session_count"],
+                    "play_time_offset": row["play_time_offset"],
                 }
 
         # Gacha collections
@@ -200,18 +209,21 @@ async def save_game_state(games: dict) -> None:
                 set(game.skip_counts.keys())
                 | set(game.total_play_time.keys())
                 | set(game.session_counts.keys())
+                | set(game.play_time_offset.keys())
             )
             for player in all_players:
                 await db.execute(
                     """INSERT INTO player_game_stats
                        (username, game_name, skip_count,
-                        total_play_time, session_count)
-                       VALUES (?, ?, ?, ?, ?)
+                        total_play_time, session_count,
+                        play_time_offset)
+                       VALUES (?, ?, ?, ?, ?, ?)
                        ON CONFLICT(username, game_name)
                        DO UPDATE SET
                        skip_count=excluded.skip_count,
                        total_play_time=excluded.total_play_time,
-                       session_count=excluded.session_count
+                       session_count=excluded.session_count,
+                       play_time_offset=excluded.play_time_offset
                     """,
                     (
                         player,
@@ -219,6 +231,7 @@ async def save_game_state(games: dict) -> None:
                         game.skip_counts.get(player, 0),
                         game.total_play_time.get(player, 0.0),
                         game.session_counts.get(player, 0),
+                        game.play_time_offset.get(player, 0.0),
                     ),
                 )
 
@@ -348,3 +361,11 @@ async def delete_user_sessions(username: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM sessions WHERE username = ?", (username,))
         await db.commit()
+
+
+async def get_all_usernames() -> list[str]:
+    """Return all registered usernames, sorted alphabetically."""
+    async with aiosqlite.connect(DB_PATH) as db, db.execute(
+        "SELECT username FROM users ORDER BY username"
+    ) as cur:
+        return [row[0] async for row in cur]

@@ -12,7 +12,7 @@ from pathlib import Path
 import bcrypt
 import qrcode
 from fastapi import Cookie, FastAPI, Form, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -29,6 +29,7 @@ from database import (
     create_session,
     create_user,
     delete_session,
+    get_all_usernames,
     get_user,
     init_db,
     load_state,
@@ -76,6 +77,7 @@ class Game:
     skip_counts: dict[str, int] = field(default_factory=dict)  # Skips per player
     total_play_time: dict[str, float] = field(default_factory=dict)  # Cumulative secs
     session_counts: dict[str, int] = field(default_factory=dict)  # Times played
+    play_time_offset: dict[str, float] = field(default_factory=dict)
 
 
 # In-memory state
@@ -128,6 +130,8 @@ async def lifespan(app: FastAPI):
                 game.total_play_time[username] = stats["total_play_time"]
             if stats["session_count"]:
                 game.session_counts[username] = stats["session_count"]
+            if stats.get("play_time_offset"):
+                game.play_time_offset[username] = stats["play_time_offset"]
 
     gacha_collections = state["gacha_collections"]
     gacha_pulls_given = state["gacha_pulls_given"]
@@ -353,6 +357,9 @@ async def index(request: Request, session: str = Cookie(default="")):
         # Get error from query params
         error = request.query_params.get("error", "")
 
+        # Load all usernames for admin dropdowns
+        all_users = await get_all_usernames() if is_admin(player) else []
+
         game_keys = list(games.keys())
         random.shuffle(game_keys)
         shuffled_games = {key: games[key] for key in game_keys}
@@ -372,9 +379,11 @@ async def index(request: Request, session: str = Cookie(default="")):
                 "paused": queue_paused,
                 "now": pause_started_at if queue_paused and pause_started_at else now,
                 "is_host": is_admin(player),
+                "all_users": all_users,
                 "gacha_pulls": player_gacha_pulls,
                 "gacha_collection": player_collection,
                 "gacha_characters": GACHA_CHARACTERS,
+                "gacha_rarity_weights": GACHA_RARITY_WEIGHTS,
                 "gacha_next_pull_secs": gacha_next_pull_secs,
                 "error": error,
             },
@@ -791,6 +800,115 @@ async def admin_bump_down(
 
     await broadcast()
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/set-playing")
+async def admin_set_playing(
+    game_name: str = Form(...),
+    player_name: str = Form(...),
+    session: str = Cookie(default=""),
+):
+    """Admin only: Set a user as now_playing on a game."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
+        return RedirectResponse(url="/", status_code=303)
+
+    if game_name not in games:
+        return RedirectResponse(url="/", status_code=303)
+
+    async with lock:
+        game = games[game_name]
+        # End current player's turn if someone is playing
+        if game.now_playing and game.play_started_at is not None:
+            play_duration = time.time() - game.play_started_at
+            game.total_play_time[game.now_playing] = (
+                game.total_play_time.get(game.now_playing, 0) + play_duration
+            )
+        # Remove player_name from queue if present
+        if player_name in game.queue:
+            game.queue.remove(player_name)
+        # Set as now_playing
+        game.now_playing = player_name
+        game.turn_started_at = time.time()
+        game.turn_accepted = True
+        game.play_started_at = time.time()
+
+        await save_game_state(games)
+
+    await broadcast()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/add-to-queue")
+async def admin_add_to_queue(
+    game_name: str = Form(...),
+    player_name: str = Form(...),
+    session: str = Cookie(default=""),
+):
+    """Admin only: Add a user to the end of a game's queue."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
+        return RedirectResponse(url="/", status_code=303)
+
+    if game_name not in games:
+        return RedirectResponse(url="/", status_code=303)
+
+    async with lock:
+        game = games[game_name]
+        # Skip if already in queue or already now_playing
+        if player_name not in game.queue and game.now_playing != player_name:
+            game.queue.append(player_name)
+            # If no one is playing, advance to start
+            if game.now_playing is None:
+                advance_game(game)
+
+        await save_game_state(games)
+
+    await broadcast()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/reset-stats")
+async def admin_reset_stats(session: str = Cookie(default="")):
+    """Admin only: Reset displayed session counts and play times (gacha unaffected)."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
+        return RedirectResponse(url="/", status_code=303)
+
+    async with lock:
+        for game in games.values():
+            for p in list(game.total_play_time.keys()):
+                game.play_time_offset[p] = game.total_play_time[p]
+            game.session_counts.clear()
+
+        await save_game_state(games)
+
+    await broadcast()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/idle/start")
+async def idle_start(session: str = Cookie(default="")):
+    player = get_player_from_session(session)
+    if not player:
+        return JSONResponse({"error": "not_logged_in"}, status_code=401)
+    return JSONResponse({"status": "started"})
+
+
+@app.post("/idle/complete")
+async def idle_complete(session: str = Cookie(default="")):
+    player = get_player_from_session(session)
+    if not player:
+        return JSONResponse({"error": "not_logged_in"}, status_code=401)
+    async with lock:
+        char, is_dupe = gacha_pull(player)
+        count = gacha_collections[player][char["name"]]
+        gacha_last_pull[player] = [
+            {**char, "is_duplicate": is_dupe, "count": count}
+        ]
+        await save_gacha_state(gacha_collections, gacha_pulls_given)
+    await broadcast()
+    return JSONResponse({"status": "completed"})
 
 
 if __name__ == "__main__":
