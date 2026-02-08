@@ -60,7 +60,7 @@ def generate_qr_code_data_url(url: str) -> str:
 
 
 # Generate QR code once at startup
-# QR_URL can be set via BASE_URL env var (e.g. "http://192.168.1.100:5050")
+# QR_URL can be set via BASE_URL env var (e.g. "http://192.168.1.100:8080")
 # Falls back to hostname-based URL for local development
 QR_URL = os.environ.get("BASE_URL", f"http://{socket.gethostname()}:{SERVER_PORT}")
 QR_CODE_DATA_URL = generate_qr_code_data_url(QR_URL)

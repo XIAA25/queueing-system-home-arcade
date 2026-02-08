@@ -2,9 +2,9 @@ services:
   app:
     build: .
     ports:
-      - "5050:5050"
+      - "8080:8080"
     environment:
-      - BASE_URL=http://XIAA:5050
+      - BASE_URL=http://XIAA:8080
     volumes:
       - data:/app/data
     restart: unless-stopped
