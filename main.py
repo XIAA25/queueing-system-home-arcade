@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import io
-import os
 import random
 import socket
 import time
@@ -39,58 +38,9 @@ from database import (
 )
 
 
-def get_local_ip() -> str:
-    """Get the local IP address for LAN access."""
-    try:
-        # Connect to an external address to determine the local IP
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(2)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        # Fallback: try to get hostname-based IP
-        try:
-            return socket.gethostbyname(socket.gethostname())
-        except Exception:
-            return "127.0.0.1"
-
-
-def get_docker_host_ip() -> str | None:
-    """Try to resolve Docker Desktop host IP (Windows/Mac)."""
-    try:
-        return socket.gethostbyname("host.docker.internal")
-    except Exception:
-        return None
-
-
-def is_host(request_client_host: str | None) -> bool:
-    """Check if the request is coming from the host machine."""
-    if not request_client_host:
-        return False
-    # Check common localhost addresses
-    if request_client_host in {"127.0.0.1", "localhost", "::1"}:
-        return True
-    # Check if it matches the server's local IP
-    if request_client_host == LOCAL_IP:
-        return True
-    # Check Docker host IP
-    if DOCKER_HOST_IP and request_client_host == DOCKER_HOST_IP:
-        return True
-    # Check extra host IPs from env var
-    if request_client_host in EXTRA_HOST_IPS:
-        return True
-    # Check IPv6-mapped IPv4 addresses (e.g., ::ffff:127.0.0.1)
-    if request_client_host.startswith("::ffff:"):
-        ipv4_part = request_client_host[7:]  # Remove "::ffff:" prefix
-        allowed = {"127.0.0.1", LOCAL_IP}
-        if DOCKER_HOST_IP:
-            allowed.add(DOCKER_HOST_IP)
-        allowed.update(EXTRA_HOST_IPS)
-        if ipv4_part in allowed:
-            return True
-    return False
+def is_admin(player: str) -> bool:
+    """Check if the player is the admin user."""
+    return player.lower().strip() == "admin"
 
 
 def generate_qr_code_data_url(url: str) -> str:
@@ -108,11 +58,6 @@ def generate_qr_code_data_url(url: str) -> str:
 
 
 # Generate QR code once at startup
-LOCAL_IP = get_local_ip()
-DOCKER_HOST_IP = get_docker_host_ip()
-EXTRA_HOST_IPS = set(
-    ip.strip() for ip in os.environ.get("HOST_IPS", "").split(",") if ip.strip()
-)
 HOSTNAME = socket.gethostname()
 QR_URL = f"http://{HOSTNAME}:{SERVER_PORT}"
 QR_CODE_DATA_URL = generate_qr_code_data_url(QR_URL)
@@ -391,13 +336,6 @@ async def index(request: Request, session: str = Cookie(default="")):
                         cooldowns[game.name] = cooldown
                     player_games[game.name] = None
 
-        client_host = None
-        if request.client:
-            client_host = request.client.host
-        # Also check X-Forwarded-For header in case of proxy
-        if not client_host:
-            client_host = request.headers.get("X-Forwarded-For", "unknown")
-
         # Gacha data for template
         player_gacha_pulls = gacha_last_pull.get(player) if player else None
         player_collection = gacha_collections.get(player, {}) if player else {}
@@ -427,7 +365,7 @@ async def index(request: Request, session: str = Cookie(default="")):
                 "qr_url": QR_URL,
                 "paused": queue_paused,
                 "now": pause_started_at if queue_paused and pause_started_at else now,
-                "is_host": is_host(client_host),
+                "is_host": is_admin(player),
                 "gacha_pulls": player_gacha_pulls,
                 "gacha_collection": player_collection,
                 "gacha_characters": GACHA_CHARACTERS,
@@ -704,11 +642,10 @@ async def logout(session: str = Cookie(default="")):
 
 
 @app.post("/toggle-pause")
-async def toggle_pause(request: Request):
+async def toggle_pause(session: str = Cookie(default="")):
     global queue_paused, pause_started_at
-    client_host = request.client.host if request.client else None
-    if not is_host(client_host):
-        # Only host can toggle pause
+    player = get_player_from_session(session)
+    if not is_admin(player):
         return RedirectResponse(url="/", status_code=303)
     async with lock:
         queue_paused = not queue_paused
@@ -731,10 +668,12 @@ async def toggle_pause(request: Request):
 
 
 @app.post("/admin/kick")
-async def admin_kick_player(request: Request, game_name: str = Form(...)):
-    """Host only: Kick the current player from a game."""
-    client_host = request.client.host if request.client else None
-    if not is_host(client_host):
+async def admin_kick_player(
+    game_name: str = Form(...), session: str = Cookie(default="")
+):
+    """Admin only: Kick the current player from a game."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
         return RedirectResponse(url="/", status_code=303)
 
     if game_name not in games:
@@ -763,11 +702,13 @@ async def admin_kick_player(request: Request, game_name: str = Form(...)):
 
 @app.post("/admin/remove")
 async def admin_remove_from_queue(
-    request: Request, game_name: str = Form(...), player_name: str = Form(...)
+    game_name: str = Form(...),
+    player_name: str = Form(...),
+    session: str = Cookie(default=""),
 ):
-    """Host only: Remove a player from a game's queue."""
-    client_host = request.client.host if request.client else None
-    if not is_host(client_host):
+    """Admin only: Remove a player from a game's queue."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
         return RedirectResponse(url="/", status_code=303)
 
     if game_name not in games:
@@ -788,11 +729,13 @@ async def admin_remove_from_queue(
 
 @app.post("/admin/bump-up")
 async def admin_bump_up(
-    request: Request, game_name: str = Form(...), player_name: str = Form(...)
+    game_name: str = Form(...),
+    player_name: str = Form(...),
+    session: str = Cookie(default=""),
 ):
-    """Host only: Move a player up in the queue (closer to front)."""
-    client_host = request.client.host if request.client else None
-    if not is_host(client_host):
+    """Admin only: Move a player up in the queue (closer to front)."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
         return RedirectResponse(url="/", status_code=303)
 
     if game_name not in games:
@@ -816,11 +759,13 @@ async def admin_bump_up(
 
 @app.post("/admin/bump-down")
 async def admin_bump_down(
-    request: Request, game_name: str = Form(...), player_name: str = Form(...)
+    game_name: str = Form(...),
+    player_name: str = Form(...),
+    session: str = Cookie(default=""),
 ):
-    """Host only: Move a player down in the queue (closer to back)."""
-    client_host = request.client.host if request.client else None
-    if not is_host(client_host):
+    """Admin only: Move a player down in the queue (closer to back)."""
+    player = get_player_from_session(session)
+    if not is_admin(player):
         return RedirectResponse(url="/", status_code=303)
 
     if game_name not in games:

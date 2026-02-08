@@ -344,7 +344,8 @@ async def test_leave_during_pending(client):
 
 
 async def test_toggle_pause(client):
-    """Toggle pause should switch the paused state."""
+    """Toggle pause should switch the paused state (admin only)."""
+    set_session(client, "admin", "admin-token")
     assert main.queue_paused is False
 
     await client.post("/toggle-pause")
